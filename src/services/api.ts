@@ -53,7 +53,7 @@ export type ComparisonResultType = {
 // Mock datasets storage (in a real app, this would be in a database)
 let datasetsStore: DatasetType[] = [];
 let validationResultsStore: Record<string, ValidationResult[]> = {};
-let comparisonResultsStore: Record<string, Record<string, ComparisonResultType>> = {};
+let comparisonResultsStore: Record<string, ComparisonResultType> = {};
 let nextId = 1;
 
 // Format file size
