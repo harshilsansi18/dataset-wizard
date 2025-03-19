@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,7 +14,6 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle, 
-  ChevronRight, 
   Terminal,
   Copy,
   Database,
@@ -70,7 +68,7 @@ const Validation = () => {
     setValidationResults([]);
 
     try {
-      // Run the validation through our API service
+      // Run validation through our API service
       const results = await runValidation(selectedDataset);
       setValidationResults(results);
       
@@ -89,7 +87,7 @@ const Validation = () => {
       console.error("Validation error:", error);
       toast({
         title: "Validation Failed",
-        description: "There was an error running the validation. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error running the validation. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -123,6 +121,7 @@ const Validation = () => {
     }
   };
 
+  // Generate example Soda Core YAML configuration based on selected dataset
   const validationSnippet = `
 # Example Soda Core validation YAML
 profile: postgres
@@ -229,7 +228,7 @@ datasets:
                 >
                   {isRunning ? (
                     <>
-                      <Shield className="mr-2 h-4 w-4 animate-pulse" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Running Validation...
                     </>
                   ) : (

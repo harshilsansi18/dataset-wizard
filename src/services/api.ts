@@ -21,6 +21,7 @@ export type ValidationResult = {
 
 // Mock datasets storage (in a real app, this would be in a database)
 let datasetsStore: DatasetType[] = [];
+let validationResultsStore: Record<string, ValidationResult[]> = {};
 let nextId = 1;
 
 // Format file size
@@ -50,14 +51,32 @@ const getFileType = (filename: string): string => {
   }
 };
 
+// Helper to read file content for validation
+const readFileContent = async (file: File): Promise<string[][]> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (!event.target?.result) {
+        resolve([]);
+        return;
+      }
+      
+      const content = event.target.result as string;
+      // Basic CSV parsing (in a real app, use a proper CSV parser)
+      const rows = content.split('\n').map(row => row.split(','));
+      resolve(rows);
+    };
+    reader.readAsText(file);
+  });
+};
+
 // Upload file API
 export const uploadDataset = async (file: File): Promise<DatasetType> => {
-  // In a real app, you would upload to a server/cloud storage
   console.log('Uploading file:', file.name);
   
   // Simulate API call
   return new Promise((resolve) => {
-    setTimeout(() => {
+    setTimeout(async () => {
       // Create a new dataset object
       const newDataset: DatasetType = {
         id: String(nextId++),
@@ -79,13 +98,22 @@ export const uploadDataset = async (file: File): Promise<DatasetType> => {
 
 // Get all datasets API
 export const getDatasets = async (): Promise<DatasetType[]> => {
-  // In a real app, you would fetch from a server
   console.log('Fetching datasets');
   
-  // Simulate API call
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve([...datasetsStore]);
+    }, 500);
+  });
+};
+
+// Get validation results for all datasets
+export const getAllValidationResults = async (): Promise<Record<string, ValidationResult[]>> => {
+  console.log('Fetching all validation results');
+  
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({...validationResultsStore});
     }, 500);
   });
 };
@@ -101,59 +129,91 @@ export const runValidation = async (datasetId: string): Promise<ValidationResult
     throw new Error('Dataset not found');
   }
   
-  // Simulate Soda Core validation
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Generate validation results based on dataset type
-      const results: ValidationResult[] = [];
+  if (!dataset.path) {
+    throw new Error('Dataset file not found');
+  }
+  
+  // Fetch the file for validation
+  return new Promise(async (resolve) => {
+    try {
+      // In a real app, you would call the Soda Core API here
+      // For this demo, we'll do some basic file-based validation
       
-      // Basic checks for all types
+      const response = await fetch(dataset.path);
+      const fileBlob = await response.blob();
+      const file = new File([fileBlob], dataset.name, { type: fileBlob.type });
+      
+      // Perform "validation" on the file content
+      let rows: string[][] = [];
+      
+      if (dataset.type === 'CSV' || dataset.type === 'Text') {
+        rows = await readFileContent(file);
+      }
+      
+      // Generate validation results based on actual file content
+      const results: ValidationResult[] = [];
+      const timestamp = new Date().toISOString();
+      
+      // Basic row count check (works for any file)
       results.push({
         id: 1,
         check: "Row Count Check",
         status: "Pass",
-        details: "Table has 1,254 rows",
-        timestamp: new Date().toISOString()
+        details: rows.length > 1 ? `Table has ${rows.length} rows` : `File size: ${dataset.size}`,
+        timestamp
       });
       
-      results.push({
-        id: 2,
-        check: "Null Values Check",
-        status: Math.random() > 0.5 ? "Pass" : "Warning",
-        details: Math.random() > 0.5 
-          ? "No null values found in required columns" 
-          : "Found 15 null values in 'email' column",
-        timestamp: new Date().toISOString()
-      });
-      
-      // Type-specific checks
-      if (dataset.type === 'CSV' || dataset.type === 'Excel') {
+      if (rows.length > 0) {
+        // Headers check (for CSV/text files)
+        const headers = rows[0];
         results.push({
-          id: 3,
+          id: 2,
           check: "Column Names Check",
           status: "Pass",
-          details: "All required columns are present",
-          timestamp: new Date().toISOString()
+          details: `Found ${headers.length} columns: ${headers.slice(0, 3).join(', ')}${headers.length > 3 ? '...' : ''}`,
+          timestamp
         });
         
+        // Check for null values in the first column
+        const nullValues = rows.slice(1).filter(row => !row[0] || row[0].trim() === '').length;
         results.push({
-          id: 4,
-          check: "Data Type Validation",
-          status: Math.random() > 0.7 ? "Pass" : "Fail",
-          details: Math.random() > 0.7 
-            ? "All data types match schema definition" 
-            : "Column 'age' contains non-numeric values",
-          timestamp: new Date().toISOString()
+          id: 3,
+          check: "Null Values Check",
+          status: nullValues > 0 ? "Warning" : "Pass",
+          details: nullValues > 0 
+            ? `Found ${nullValues} null values in first column` 
+            : "No null values found in first column",
+          timestamp
         });
-      }
-      
-      if (dataset.type === 'Excel') {
+        
+        // Data type consistency in the second column (if it exists)
+        if (headers.length > 1) {
+          const secondColValues = rows.slice(1).map(row => row[1]);
+          const allNumbers = secondColValues.every(val => !isNaN(Number(val)));
+          
+          results.push({
+            id: 4,
+            check: "Data Type Validation",
+            status: allNumbers ? "Pass" : "Warning",
+            details: allNumbers 
+              ? `Column '${headers[1]}' contains consistent numeric values` 
+              : `Column '${headers[1]}' contains mixed data types`,
+            timestamp
+          });
+        }
+        
+        // Duplicate check in the first column
+        const uniqueValues = new Set(rows.slice(1).map(row => row[0]));
+        const duplicates = rows.length - 1 - uniqueValues.size;
+        
         results.push({
           id: 5,
-          check: "Sheet Structure",
-          status: "Pass",
-          details: "All sheets follow the expected structure",
-          timestamp: new Date().toISOString()
+          check: "Duplicate Check",
+          status: duplicates > 0 ? "Fail" : "Pass",
+          details: duplicates > 0 
+            ? `Found ${duplicates} duplicate values in first column` 
+            : "No duplicates found in first column",
+          timestamp
         });
       }
       
@@ -165,7 +225,27 @@ export const runValidation = async (datasetId: string): Promise<ValidationResult
         ? 'Issues Found' 
         : (hasWarning ? 'Issues Found' : 'Validated');
       
+      // Store validation results
+      validationResultsStore[datasetId] = results;
+      
       resolve(results);
-    }, 2000);
+    } catch (error) {
+      console.error('Error during validation:', error);
+      const errorResult: ValidationResult[] = [{
+        id: 1,
+        check: "Validation Error",
+        status: "Fail",
+        details: `Error validating file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date().toISOString()
+      }];
+      
+      // Update dataset status
+      dataset.status = 'Issues Found';
+      
+      // Store validation results
+      validationResultsStore[datasetId] = errorResult;
+      
+      resolve(errorResult);
+    }
   });
 };

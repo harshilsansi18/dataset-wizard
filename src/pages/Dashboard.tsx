@@ -14,43 +14,149 @@ import {
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "@/components/ui/use-toast";
+import { getDatasets, getAllValidationResults, DatasetType, ValidationResult } from "@/services/api";
 
 const Dashboard = () => {
+  const [datasets, setDatasets] = useState<DatasetType[]>([]);
+  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult[]>>({});
   const [stats, setStats] = useState({
     totalDatasets: 0,
     validationRuns: 0,
     comparisons: 0,
     passRate: 0
   });
-
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading data
-    const timer = setTimeout(() => {
-      setStats({
-        totalDatasets: 12,
-        validationRuns: 48,
-        comparisons: 8,
-        passRate: 85
-      });
-      setIsLoading(false);
-      toast({
-        title: "Dashboard updated",
-        description: "Latest validation metrics have been loaded",
-      });
-    }, 1500);
-
-    return () => clearTimeout(timer);
+    fetchData();
   }, []);
 
-  // Recent validation runs data
-  const recentRuns = [
-    { id: 1, dataset: "Sales_2023_Q2", status: "Pass", issues: 0, timestamp: "2023-07-15 09:23" },
-    { id: 2, dataset: "Customer_Data", status: "Fail", issues: 3, timestamp: "2023-07-14 16:42" },
-    { id: 3, dataset: "Inventory_July", status: "Warning", issues: 1, timestamp: "2023-07-13 11:17" },
-    { id: 4, dataset: "Marketing_Campaign", status: "Pass", issues: 0, timestamp: "2023-07-12 14:05" },
-  ];
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch real datasets
+      const datasetsData = await getDatasets();
+      setDatasets(datasetsData);
+      
+      // Fetch validation results
+      const resultsData = await getAllValidationResults();
+      setValidationResults(resultsData);
+      
+      // Calculate stats
+      calculateStats(datasetsData, resultsData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch dashboard data",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const calculateStats = (datasets: DatasetType[], results: Record<string, ValidationResult[]>) => {
+    const totalDatasets = datasets.length;
+    const validationRuns = Object.keys(results).length;
+    
+    // Count all validation checks
+    let totalChecks = 0;
+    let passedChecks = 0;
+    
+    Object.values(results).forEach(resultSet => {
+      resultSet.forEach(result => {
+        totalChecks++;
+        if (result.status === "Pass") {
+          passedChecks++;
+        }
+      });
+    });
+    
+    // Calculate pass rate
+    const passRate = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : 0;
+    
+    setStats({
+      totalDatasets,
+      validationRuns,
+      comparisons: 0, // Not implemented yet
+      passRate
+    });
+  };
+
+  // Get recent validation runs from the results
+  const getRecentRuns = (): { id: number, dataset: string, status: string, issues: number, timestamp: string }[] => {
+    const recent: { id: number, dataset: string, status: string, issues: number, timestamp: string }[] = [];
+    
+    // Create a map of dataset IDs to names
+    const datasetMap = new Map(datasets.map(d => [d.id, d.name]));
+    
+    // Process validation results into recent runs
+    Object.entries(validationResults).forEach(([datasetId, results], index) => {
+      if (results.length === 0) return;
+      
+      const datasetName = datasetMap.get(datasetId) || 'Unknown';
+      const latestTimestamp = results[0].timestamp; // Assuming results are ordered by timestamp
+      
+      // Determine status based on validation results
+      const hasFailure = results.some(r => r.status === 'Fail');
+      const hasWarning = results.some(r => r.status === 'Warning');
+      const status = hasFailure ? 'Fail' : (hasWarning ? 'Warning' : 'Pass');
+      
+      // Count issues
+      const issues = results.filter(r => r.status !== 'Pass').length;
+      
+      recent.push({
+        id: index + 1,
+        dataset: datasetName,
+        status,
+        issues,
+        timestamp: new Date(latestTimestamp).toLocaleString()
+      });
+    });
+    
+    // Sort by timestamp (most recent first) and take top 4
+    return recent.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 4);
+  };
+
+  // Calculate data quality by category based on validation results
+  const calculateQualityData = () => {
+    // Initialize categories
+    const categories = {
+      Completeness: { passed: 0, total: 0 },
+      Accuracy: { passed: 0, total: 0 },
+      Consistency: { passed: 0, total: 0 },
+      Timeliness: { passed: 0, total: 0 },
+      Validity: { passed: 0, total: 0 }
+    };
+    
+    // Map validation checks to categories
+    const checkToCategory: Record<string, keyof typeof categories> = {
+      "Row Count Check": "Completeness",
+      "Null Values Check": "Completeness",
+      "Column Names Check": "Validity",
+      "Data Type Validation": "Accuracy",
+      "Duplicate Check": "Consistency",
+      "Sheet Structure": "Validity"
+    };
+    
+    // Process all validation results
+    Object.values(validationResults).forEach(resultSet => {
+      resultSet.forEach(result => {
+        const category = checkToCategory[result.check] || "Validity";
+        categories[category].total++;
+        if (result.status === "Pass") {
+          categories[category].passed++;
+        }
+      });
+    });
+    
+    // Calculate scores (or return 0 if no checks)
+    return Object.entries(categories).map(([category, { passed, total }]) => ({
+      category,
+      score: total > 0 ? Math.round((passed / total) * 100) : 0
+    }));
+  };
 
   const statusIcon = (status: string) => {
     switch (status) {
@@ -83,14 +189,9 @@ const Dashboard = () => {
     })
   };
 
-  // Data quality by category data
-  const qualityData = [
-    { category: "Completeness", score: 92 },
-    { category: "Accuracy", score: 88 },
-    { category: "Consistency", score: 95 },
-    { category: "Timeliness", score: 78 },
-    { category: "Validity", score: 91 }
-  ];
+  // Get recent runs and quality data
+  const recentRuns = getRecentRuns();
+  const qualityData = calculateQualityData();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -150,7 +251,7 @@ const Dashboard = () => {
               </div>
               <p className="text-xs text-slate-500">
                 {stats.validationRuns > 0 ? 
-                  `Last run ${Math.floor(Math.random() * 24)} hours ago` : 
+                  `${stats.validationRuns} total validations run` : 
                   "No validation runs yet"}
               </p>
             </CardContent>
@@ -230,6 +331,14 @@ const Dashboard = () => {
                     <div key={i} className="h-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
                   ))}
                 </div>
+              ) : recentRuns.length === 0 ? (
+                <div className="flex h-52 flex-col items-center justify-center text-center">
+                  <Gauge className="mb-2 h-10 w-10 text-slate-300" />
+                  <p className="text-lg font-medium">No validation runs yet</p>
+                  <p className="text-sm text-slate-500">
+                    Run validation on your datasets to see results here
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {recentRuns.map((run) => (
@@ -276,6 +385,14 @@ const Dashboard = () => {
             <CardContent>
               {isLoading ? (
                 <div className="flex h-[220px] animate-pulse items-end justify-between space-x-2 rounded bg-slate-200 dark:bg-slate-700"></div>
+              ) : qualityData.every(item => item.score === 0) ? (
+                <div className="flex h-52 flex-col items-center justify-center text-center">
+                  <BarChart3 className="mb-2 h-10 w-10 text-slate-300" />
+                  <p className="text-lg font-medium">No quality data available</p>
+                  <p className="text-sm text-slate-500">
+                    Run validation on your datasets to generate quality metrics
+                  </p>
+                </div>
               ) : (
                 <div className="h-[220px]">
                   <motion.div
