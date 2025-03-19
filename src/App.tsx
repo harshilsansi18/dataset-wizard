@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
 import Validation from "./pages/Validation";
 import Comparison from "./pages/Comparison";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/datasets" element={<Datasets />} />
               <Route path="/validation" element={<Validation />} />
               <Route path="/comparison" element={<Comparison />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

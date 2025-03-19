@@ -1,426 +1,470 @@
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  Gauge, 
-  Clock, 
-  BarChart3, 
-  Database, 
-  GitCompare 
-} from "lucide-react";
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { toast } from "@/components/ui/use-toast";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from "recharts";
+import { 
+  BarChart3, 
+  ArrowRight, 
+  Database, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle,
+  Plus,
+  FileText,
+  RefreshCw,
+  Shield,
+  PieChart as PieChartIcon,
+  GitCompare
+} from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { getDatasets, getAllValidationResults, DatasetType, ValidationResult } from "@/services/api";
+import { toast } from "@/components/ui/use-toast";
+
+// Function to count validation results by status
+const getValidationStatusCounts = (validationResults: Record<string, ValidationResult[]>) => {
+  let passCount = 0;
+  let warningCount = 0;
+  let failCount = 0;
+  
+  Object.values(validationResults).forEach(results => {
+    passCount += results.filter(r => r.status === "Pass").length;
+    warningCount += results.filter(r => r.status === "Warning").length;
+    failCount += results.filter(r => r.status === "Fail").length;
+  });
+  
+  return { passCount, warningCount, failCount };
+};
+
+// Function to get dataset validation stats
+const getDatasetValidationStats = (datasets: DatasetType[]) => {
+  return {
+    validatedCount: datasets.filter(d => d.status === "Validated").length,
+    issuesFoundCount: datasets.filter(d => d.status === "Issues Found").length,
+    notValidatedCount: datasets.filter(d => d.status === "Not Validated").length,
+    totalCount: datasets.length
+  };
+};
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult[]>>({});
-  const [stats, setStats] = useState({
-    totalDatasets: 0,
-    validationRuns: 0,
-    comparisons: 0,
-    passRate: 0
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
-      // Fetch real datasets
-      const datasetsData = await getDatasets();
+      const [datasetsData, validationResultsData] = await Promise.all([
+        getDatasets(),
+        getAllValidationResults()
+      ]);
+      
       setDatasets(datasetsData);
-      
-      // Fetch validation results
-      const resultsData = await getAllValidationResults();
-      setValidationResults(resultsData);
-      
-      // Calculate stats
-      calculateStats(datasetsData, resultsData);
+      setValidationResults(validationResultsData);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Error fetching dashboard data:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch dashboard data",
+        description: "Failed to fetch dashboard data.",
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const calculateStats = (datasets: DatasetType[], results: Record<string, ValidationResult[]>) => {
-    const totalDatasets = datasets.length;
-    const validationRuns = Object.keys(results).length;
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
     
-    // Count all validation checks
-    let totalChecks = 0;
-    let passedChecks = 0;
-    
-    Object.values(results).forEach(resultSet => {
-      resultSet.forEach(result => {
-        totalChecks++;
-        if (result.status === "Pass") {
-          passedChecks++;
-        }
-      });
-    });
-    
-    // Calculate pass rate
-    const passRate = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : 0;
-    
-    setStats({
-      totalDatasets,
-      validationRuns,
-      comparisons: 0, // Not implemented yet
-      passRate
+    toast({
+      title: "Dashboard refreshed",
+      description: "Latest data has been loaded.",
     });
   };
 
-  // Get recent validation runs from the results
-  const getRecentRuns = (): { id: number, dataset: string, status: string, issues: number, timestamp: string }[] => {
-    const recent: { id: number, dataset: string, status: string, issues: number, timestamp: string }[] = [];
-    
-    // Create a map of dataset IDs to names
-    const datasetMap = new Map(datasets.map(d => [d.id, d.name]));
-    
-    // Process validation results into recent runs
-    Object.entries(validationResults).forEach(([datasetId, results], index) => {
-      if (results.length === 0) return;
-      
-      const datasetName = datasetMap.get(datasetId) || 'Unknown';
-      const latestTimestamp = results[0].timestamp; // Assuming results are ordered by timestamp
-      
-      // Determine status based on validation results
-      const hasFailure = results.some(r => r.status === 'Fail');
-      const hasWarning = results.some(r => r.status === 'Warning');
-      const status = hasFailure ? 'Fail' : (hasWarning ? 'Warning' : 'Pass');
-      
-      // Count issues
-      const issues = results.filter(r => r.status !== 'Pass').length;
-      
-      recent.push({
-        id: index + 1,
-        dataset: datasetName,
-        status,
-        issues,
-        timestamp: new Date(latestTimestamp).toLocaleString()
-      });
-    });
-    
-    // Sort by timestamp (most recent first) and take top 4
-    return recent.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 4);
-  };
+  // Prepare data for charts and stats
+  const { passCount, warningCount, failCount } = getValidationStatusCounts(validationResults);
+  const totalChecks = passCount + warningCount + failCount;
+  
+  const validationPieData = [
+    { name: "Pass", value: passCount, color: "#22c55e" },
+    { name: "Warning", value: warningCount, color: "#f59e0b" },
+    { name: "Fail", value: failCount, color: "#ef4444" },
+  ].filter(item => item.value > 0);
 
-  // Calculate data quality by category based on validation results
-  const calculateQualityData = () => {
-    // Initialize categories
-    const categories = {
-      Completeness: { passed: 0, total: 0 },
-      Accuracy: { passed: 0, total: 0 },
-      Consistency: { passed: 0, total: 0 },
-      Timeliness: { passed: 0, total: 0 },
-      Validity: { passed: 0, total: 0 }
-    };
-    
-    // Map validation checks to categories
-    const checkToCategory: Record<string, keyof typeof categories> = {
-      "Row Count Check": "Completeness",
-      "Null Values Check": "Completeness",
-      "Column Names Check": "Validity",
-      "Data Type Validation": "Accuracy",
-      "Duplicate Check": "Consistency",
-      "Sheet Structure": "Validity"
-    };
-    
-    // Process all validation results
-    Object.values(validationResults).forEach(resultSet => {
-      resultSet.forEach(result => {
-        const category = checkToCategory[result.check] || "Validity";
-        categories[category].total++;
-        if (result.status === "Pass") {
-          categories[category].passed++;
-        }
-      });
-    });
-    
-    // Calculate scores (or return 0 if no checks)
-    return Object.entries(categories).map(([category, { passed, total }]) => ({
-      category,
-      score: total > 0 ? Math.round((passed / total) * 100) : 0
-    }));
-  };
-
-  const statusIcon = (status: string) => {
-    switch (status) {
-      case "Pass":
-        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-      case "Fail":
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      case "Warning":
-        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
-      default:
-        return null;
+  const datasetStats = getDatasetValidationStats(datasets);
+  
+  const datasetsPieData = [
+    { name: "Validated", value: datasetStats.validatedCount, color: "#22c55e" },
+    { name: "Issues Found", value: datasetStats.issuesFoundCount, color: "#f59e0b" },
+    { name: "Not Validated", value: datasetStats.notValidatedCount, color: "#94a3b8" },
+  ].filter(item => item.value > 0);
+  
+  // Most recent validation activity
+  const recentValidations: { datasetId: string, results: ValidationResult[] }[] = [];
+  
+  Object.entries(validationResults).forEach(([datasetId, results]) => {
+    if (results.length > 0) {
+      recentValidations.push({ datasetId, results });
     }
-  };
-
-  const chartContainer = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const chartBar = {
-    hidden: { height: 0 },
-    show: (height: number) => ({
-      height: `${height}%`,
-      transition: { duration: 0.8, ease: "easeOut" }
-    })
-  };
-
-  // Get recent runs and quality data
-  const recentRuns = getRecentRuns();
-  const qualityData = calculateQualityData();
+  });
+  
+  // Sort by most recent timestamp
+  recentValidations.sort((a, b) => {
+    const aDate = new Date(a.results[0].timestamp);
+    const bDate = new Date(b.results[0].timestamp);
+    return bDate.getTime() - aDate.getTime();
+  });
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          Overview of your data validation metrics and recent activities
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+          <p className="text-slate-600 dark:text-slate-300">
+            Overview of your data quality status
+          </p>
+        </div>
+        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
-
-      {/* Stats Cards */}
-      <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* Total Datasets */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Datasets</CardTitle>
-              <Database className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-                ) : (
-                  stats.totalDatasets
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                {stats.totalDatasets > 0 ? `${stats.totalDatasets} datasets managed` : "No datasets available"}
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Validation Runs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Validation Runs</CardTitle>
-              <Gauge className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-                ) : (
-                  stats.validationRuns
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                {stats.validationRuns > 0 ? 
-                  `${stats.validationRuns} total validations run` : 
-                  "No validation runs yet"}
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Comparisons */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Comparisons</CardTitle>
-              <GitCompare className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-                ) : (
-                  stats.comparisons
-                )}
-              </div>
-              <p className="text-xs text-slate-500">
-                {stats.comparisons > 0 ? `${stats.comparisons} dataset comparisons` : "No comparisons available"}
-              </p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Pass Rate */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pass Rate</CardTitle>
-              <BarChart3 className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {isLoading ? (
-                  <div className="h-8 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-                ) : (
-                  `${stats.passRate}%`
-                )}
-              </div>
-              <Progress value={stats.passRate} className="h-2" />
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      {/* Main Dashboard Content */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Recent Validation Runs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>Recent Validation Runs</CardTitle>
-              <CardDescription>
-                Latest data quality validation results
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="space-y-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700"></div>
-                  ))}
+      
+      {loading ? (
+        <div className="flex h-96 items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-blue-600"></div>
+        </div>
+      ) : (
+        <>
+          {/* Summary Cards */}
+          <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500">Total Datasets</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">{datasets.length}</div>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/datasets')}>
+                    <Database className="mr-1 h-4 w-4 text-slate-500" />
+                    View
+                  </Button>
                 </div>
-              ) : recentRuns.length === 0 ? (
-                <div className="flex h-52 flex-col items-center justify-center text-center">
-                  <Gauge className="mb-2 h-10 w-10 text-slate-300" />
-                  <p className="text-lg font-medium">No validation runs yet</p>
-                  <p className="text-sm text-slate-500">
-                    Run validation on your datasets to see results here
-                  </p>
+                <div className="mt-1 flex text-xs text-slate-500">
+                  <span className="flex items-center text-green-600">
+                    <CheckCircle className="mr-1 h-3 w-3" />
+                    {datasetStats.validatedCount} Validated
+                  </span>
+                  <span className="ml-2 flex items-center text-amber-600">
+                    <AlertTriangle className="mr-1 h-3 w-3" />
+                    {datasetStats.issuesFoundCount} Issues
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {recentRuns.map((run) => (
-                    <div
-                      key={run.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 p-4 dark:border-slate-700"
-                    >
-                      <div className="flex items-center space-x-3">
-                        {statusIcon(run.status)}
-                        <div>
-                          <div className="font-medium">{run.dataset}</div>
-                          <div className="text-sm text-slate-500">
-                            {run.issues === 0
-                              ? "No issues found"
-                              : `${run.issues} issue${run.issues > 1 ? "s" : ""} found`}
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500">Validation Checks</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">{totalChecks}</div>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/validation')}>
+                    <Shield className="mr-1 h-4 w-4 text-slate-500" />
+                    Run
+                  </Button>
+                </div>
+                <div className="mt-1 flex text-xs text-slate-500">
+                  <span className="flex items-center text-green-600">
+                    <CheckCircle className="mr-1 h-3 w-3" />
+                    {passCount} Pass
+                  </span>
+                  <span className="ml-2 flex items-center text-amber-600">
+                    <AlertTriangle className="mr-1 h-3 w-3" />
+                    {warningCount} Warning
+                  </span>
+                  <span className="ml-2 flex items-center text-red-600">
+                    <XCircle className="mr-1 h-3 w-3" />
+                    {failCount} Fail
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500">Success Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold">
+                    {totalChecks > 0 ? Math.round((passCount / totalChecks) * 100) : 0}%
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
+                    <FileText className="mr-1 h-4 w-4 text-slate-500" />
+                    Reports
+                  </Button>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {totalChecks === 0 ? 'No validation data available' : 
+                    `Based on ${totalChecks} validation checks`}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-slate-500">Actions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" variant="outline" onClick={() => navigate('/datasets')}>
+                    <Plus className="mr-1 h-4 w-4" />
+                    Add Dataset
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => navigate('/comparison')}>
+                    <GitCompare className="mr-1 h-4 w-4" />
+                    Compare
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Charts and Activity */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Datasets Status Chart */}
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Datasets Status</CardTitle>
+                  <PieChartIcon className="h-5 w-5 text-slate-400" />
+                </div>
+                <CardDescription>
+                  Current validation status of all datasets
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {datasetsPieData.length === 0 ? (
+                  <div className="flex h-64 flex-col items-center justify-center">
+                    <Database className="mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-center text-sm text-slate-500">
+                      No datasets available. <br /> 
+                      Upload datasets to view status.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={datasetsPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                        labelLine={false}
+                      >
+                        {datasetsPieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value, name) => [`${value} datasets`, name]}
+                        contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '6px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+              <CardFooter className="justify-center border-t bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/datasets')}>
+                  View All Datasets
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardFooter>
+            </Card>
+            
+            {/* Validation Results Chart */}
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Validation Results</CardTitle>
+                  <Shield className="h-5 w-5 text-slate-400" />
+                </div>
+                <CardDescription>
+                  Summary of all validation check results
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {validationPieData.length === 0 ? (
+                  <div className="flex h-64 flex-col items-center justify-center">
+                    <CheckCircle className="mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-center text-sm text-slate-500">
+                      No validation data available. <br />
+                      Run validations to see results.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={validationPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={90}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                        labelLine={false}
+                      >
+                        {validationPieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value, name) => [`${value} checks`, name]}
+                        contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '6px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+              <CardFooter className="justify-center border-t bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
+                  View Validation Reports
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardFooter>
+            </Card>
+            
+            {/* Recent Activity */}
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Recent Activity</CardTitle>
+                  <BarChart3 className="h-5 w-5 text-slate-400" />
+                </div>
+                <CardDescription>
+                  Latest validation runs
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentValidations.length === 0 ? (
+                  <div className="flex h-64 flex-col items-center justify-center">
+                    <Clock className="mb-4 h-12 w-12 text-slate-300" />
+                    <p className="text-center text-sm text-slate-500">
+                      No recent activity. <br />
+                      Run validations to see activity here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentValidations.slice(0, 5).map(validation => {
+                      const dataset = datasets.find(d => d.id === validation.datasetId);
+                      if (!dataset) return null;
+                      
+                      const passCount = validation.results.filter(r => r.status === "Pass").length;
+                      const warningCount = validation.results.filter(r => r.status === "Warning").length;
+                      const failCount = validation.results.filter(r => r.status === "Fail").length;
+                      const validationDate = new Date(validation.results[0].timestamp);
+                      
+                      return (
+                        <div key={validation.datasetId} className="rounded-lg border p-3">
+                          <div className="mb-2 flex items-start justify-between">
+                            <div>
+                              <h4 className="font-medium">{dataset.name}</h4>
+                              <p className="text-xs text-slate-500">{dataset.type} · {dataset.size}</p>
+                            </div>
+                            <div className={`rounded-full px-2 py-0.5 text-xs ${
+                              dataset.status === 'Validated' 
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                : dataset.status === 'Issues Found'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                                : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                            }`}>
+                              {dataset.status}
+                            </div>
+                          </div>
+                          <div className="flex items-center text-xs text-slate-500">
+                            <span className="flex items-center text-green-600">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              {passCount} Pass
+                            </span>
+                            <span className="ml-2 flex items-center text-amber-600">
+                              <AlertTriangle className="mr-1 h-3 w-3" />
+                              {warningCount} Warning
+                            </span>
+                            <span className="ml-2 flex items-center text-red-600">
+                              <XCircle className="mr-1 h-3 w-3" />
+                              {failCount} Fail
+                            </span>
+                          </div>
+                          <div className="mt-2 text-xs text-slate-500">
+                            {validationDate.toLocaleDateString()} {validationDate.toLocaleTimeString()}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center text-sm text-slate-500">
-                        <Clock className="mr-1 h-3 w-3" />
-                        {run.timestamp}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Data Quality by Category */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle>Data Quality by Category</CardTitle>
-              <CardDescription>
-                Breakdown of quality metrics by category
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex h-[220px] animate-pulse items-end justify-between space-x-2 rounded bg-slate-200 dark:bg-slate-700"></div>
-              ) : qualityData.every(item => item.score === 0) ? (
-                <div className="flex h-52 flex-col items-center justify-center text-center">
-                  <BarChart3 className="mb-2 h-10 w-10 text-slate-300" />
-                  <p className="text-lg font-medium">No quality data available</p>
-                  <p className="text-sm text-slate-500">
-                    Run validation on your datasets to generate quality metrics
-                  </p>
-                </div>
-              ) : (
-                <div className="h-[220px]">
-                  <motion.div
-                    className="flex h-full items-end justify-between space-x-2"
-                    variants={chartContainer}
-                    initial="hidden"
-                    animate="show"
-                  >
-                    {qualityData.map((item) => (
-                      <div key={item.category} className="flex h-full flex-col items-center justify-end">
-                        <motion.div
-                          className="w-12 rounded-t bg-blue-500"
-                          custom={item.score}
-                          variants={chartBar}
-                        ></motion.div>
-                        <div className="mt-2 text-xs">{item.category}</div>
-                        <div className="font-medium">{item.score}%</div>
-                      </div>
-                    ))}
-                  </motion.div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="justify-center border-t bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+                <Button variant="ghost" size="sm" onClick={() => navigate('/validation')}>
+                  Run New Validation
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </CardFooter>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 };
+
+const Clock = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg"
+    width="24" 
+    height="24" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <circle cx="12" cy="12" r="10"></circle>
+    <polyline points="12 6 12 12 16 14"></polyline>
+  </svg>
+);
 
 export default Dashboard;

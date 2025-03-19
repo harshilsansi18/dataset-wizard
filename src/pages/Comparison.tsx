@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -18,31 +17,47 @@ import {
   Database,
   Search,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Loader2,
+  Calendar
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
+import { getDatasets, compareDatasets, DatasetType, ComparisonResultType } from "@/services/api";
 
 const Comparison = () => {
   const [isComparing, setIsComparing] = useState(false);
   const [sourceDataset, setSourceDataset] = useState<string | null>(null);
   const [targetDataset, setTargetDataset] = useState<string | null>(null);
-  const [comparisonResults, setComparisonResults] = useState<any | null>(null);
+  const [comparisonResults, setComparisonResults] = useState<ComparisonResultType | null>(null);
   const [activeTab, setActiveTab] = useState("summary");
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [datasets, setDatasets] = useState<DatasetType[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock datasets
-  const datasets = [
-    { id: "1", name: "Sales_Q2_2023", type: "CSV" },
-    { id: "2", name: "Sales_Q1_2023", type: "CSV" },
-    { id: "3", name: "Customer_Data_July", type: "Excel" },
-    { id: "4", name: "Customer_Data_June", type: "Excel" },
-    { id: "5", name: "Inventory_Current", type: "PostgreSQL" },
-    { id: "6", name: "Inventory_Previous", type: "PostgreSQL" },
-  ];
+  useEffect(() => {
+    fetchDatasets();
+  }, []);
 
-  const handleCompare = () => {
+  const fetchDatasets = async () => {
+    setLoading(true);
+    try {
+      const data = await getDatasets();
+      setDatasets(data);
+    } catch (error) {
+      console.error("Error fetching datasets:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch datasets. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompare = async () => {
     if (!sourceDataset || !targetDataset) {
       toast({
         title: "Selection required",
@@ -64,88 +79,33 @@ const Comparison = () => {
     setIsComparing(true);
     setComparisonResults(null);
 
-    // Simulate comparison process
-    setTimeout(() => {
-      const mockSummary = {
-        rowsAnalyzed: 1254,
-        rowsMatched: 1201,
-        rowsDifferent: 35,
-        rowsMissingSource: 12,
-        rowsMissingTarget: 6,
-        columnsCompared: 8,
-        columnsDifferent: 2,
-        executionTime: "3.2 seconds"
+    try {
+      const options = {
+        ignoreCase: document.getElementById('ignore-case') instanceof HTMLInputElement && 
+          (document.getElementById('ignore-case') as HTMLInputElement).checked,
+        ignoreWhitespace: document.getElementById('ignore-whitespace') instanceof HTMLInputElement && 
+          (document.getElementById('ignore-whitespace') as HTMLInputElement).checked,
+        primaryKeyOnly: document.getElementById('primary-key-only') instanceof HTMLInputElement && 
+          (document.getElementById('primary-key-only') as HTMLInputElement).checked,
       };
 
-      const mockColumns = [
-        { name: "id", type: "integer", matches: true, differences: 0 },
-        { name: "name", type: "string", matches: true, differences: 0 },
-        { name: "email", type: "string", matches: false, differences: 15 },
-        { name: "phone", type: "string", matches: true, differences: 0 },
-        { name: "address", type: "string", matches: false, differences: 20 },
-        { name: "created_at", type: "timestamp", matches: true, differences: 0 },
-        { name: "updated_at", type: "timestamp", matches: true, differences: 0 },
-        { name: "status", type: "string", matches: true, differences: 0 },
-      ];
-
-      const mockDifferences = [
-        { 
-          id: 1, 
-          key: "1001", 
-          column: "email", 
-          sourceValue: "john.smith@example.com", 
-          targetValue: "john.s@example.com" 
-        },
-        { 
-          id: 2, 
-          key: "1005", 
-          column: "email", 
-          sourceValue: "sarah.johnson@example.com", 
-          targetValue: "sarah.johnson@mail.com" 
-        },
-        { 
-          id: 3, 
-          key: "1012", 
-          column: "address", 
-          sourceValue: "123 Main St, Apt 4B", 
-          targetValue: "123 Main Street, Apartment 4B" 
-        },
-        { 
-          id: 4, 
-          key: "1018", 
-          column: "address", 
-          sourceValue: "456 Oak Ave", 
-          targetValue: "456 Oak Avenue" 
-        },
-        { 
-          id: 5, 
-          key: "1025", 
-          column: "email", 
-          sourceValue: "robert.williams@example.com", 
-          targetValue: "rob.williams@example.com" 
-        },
-      ];
-
-      const mockMissing = [
-        { id: 1, key: "1030", location: "source", columns: { id: "1030", name: "Kevin Lee", email: "kevin.lee@example.com" } },
-        { id: 2, key: "1042", location: "source", columns: { id: "1042", name: "Jennifer Adams", email: "jennifer.adams@example.com" } },
-        { id: 3, key: "1056", location: "target", columns: { id: "1056", name: "Michael Chen", email: "michael.chen@example.com" } },
-        { id: 4, key: "1063", location: "target", columns: { id: "1063", name: "Emily Taylor", email: "emily.taylor@example.com" } },
-      ];
-
-      setComparisonResults({
-        summary: mockSummary,
-        columns: mockColumns,
-        differences: mockDifferences,
-        missing: mockMissing
-      });
+      const results = await compareDatasets(sourceDataset, targetDataset, options);
+      setComparisonResults(results);
       
-      setIsComparing(false);
       toast({
         title: "Comparison complete",
-        description: `Found ${mockSummary.rowsDifferent} rows with differences and ${mockSummary.rowsMissingSource + mockSummary.rowsMissingTarget} missing rows.`,
+        description: `Found ${results.summary.rowsDifferent} rows with differences and ${results.summary.rowsMissingSource + results.summary.rowsMissingTarget} missing rows.`,
       });
-    }, 3000);
+    } catch (error) {
+      console.error("Comparison error:", error);
+      toast({
+        title: "Comparison Failed",
+        description: error instanceof Error ? error.message : "There was an error comparing the datasets. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsComparing(false);
+    }
   };
 
   const handleSort = (field: string) => {
@@ -174,6 +134,8 @@ const Comparison = () => {
       <ArrowDown className="h-3 w-3" />;
   };
 
+  const comparisonDate = comparisonResults ? new Date() : null;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -184,7 +146,6 @@ const Comparison = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Left column - Configuration */}
         <div className="md:col-span-1">
           <Card>
             <CardHeader>
@@ -207,11 +168,15 @@ const Comparison = () => {
                     onChange={(e) => setSourceDataset(e.target.value)}
                   >
                     <option value="">Select source dataset...</option>
-                    {datasets.map((ds) => (
-                      <option key={ds.id} value={ds.id}>
-                        {ds.name} ({ds.type})
-                      </option>
-                    ))}
+                    {loading ? (
+                      <option value="" disabled>Loading datasets...</option>
+                    ) : (
+                      datasets.map((ds) => (
+                        <option key={ds.id} value={ds.id}>
+                          {ds.name} ({ds.type})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -228,11 +193,15 @@ const Comparison = () => {
                     onChange={(e) => setTargetDataset(e.target.value)}
                   >
                     <option value="">Select target dataset...</option>
-                    {datasets.map((ds) => (
-                      <option key={ds.id} value={ds.id}>
-                        {ds.name} ({ds.type})
-                      </option>
-                    ))}
+                    {loading ? (
+                      <option value="" disabled>Loading datasets...</option>
+                    ) : (
+                      datasets.map((ds) => (
+                        <option key={ds.id} value={ds.id}>
+                          {ds.name} ({ds.type})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -281,7 +250,7 @@ const Comparison = () => {
                 >
                   {isComparing ? (
                     <>
-                      <GitCompare className="mr-2 h-4 w-4 animate-pulse" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Comparing...
                     </>
                   ) : (
@@ -296,7 +265,6 @@ const Comparison = () => {
           </Card>
         </div>
 
-        {/* Right column - Results */}
         <div className="md:col-span-2">
           <Card className="h-full">
             <CardHeader>
@@ -305,11 +273,19 @@ const Comparison = () => {
                   <Database className="mr-2 h-5 w-5 text-blue-600" />
                   Comparison Results
                 </span>
-                {sourceDataset && targetDataset && (
-                  <span className="text-sm font-normal text-slate-500">
-                    {datasets.find(d => d.id === sourceDataset)?.name} vs {datasets.find(d => d.id === targetDataset)?.name}
-                  </span>
-                )}
+                <div className="flex items-center">
+                  {sourceDataset && targetDataset && (
+                    <span className="text-sm font-normal text-slate-500">
+                      {datasets.find(d => d.id === sourceDataset)?.name} vs {datasets.find(d => d.id === targetDataset)?.name}
+                    </span>
+                  )}
+                  {comparisonDate && (
+                    <span className="ml-4 flex items-center text-sm text-slate-400">
+                      <Calendar className="mr-1 h-4 w-4" />
+                      {comparisonDate.toLocaleDateString() + ' ' + comparisonDate.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </CardTitle>
               <Tabs 
                 value={activeTab} 

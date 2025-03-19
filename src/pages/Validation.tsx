@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -17,17 +18,20 @@ import {
   Terminal,
   Copy,
   Database,
-  Loader2
+  Loader2,
+  FileText,
+  Calendar
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { getDatasets, runValidation, DatasetType, ValidationResult } from "@/services/api";
 
 const Validation = () => {
+  const navigate = useNavigate();
   const [isRunning, setIsRunning] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [validationMethod, setValidationMethod] = useState("basic");
-  const [customSQL, setCustomSQL] = useState("");
+  const [customSQL, setCustomSQL] = useState("SELECT COUNT(*) FROM table WHERE column IS NULL");
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,8 +72,12 @@ const Validation = () => {
     setValidationResults([]);
 
     try {
-      // Run validation through our API service
-      const results = await runValidation(selectedDataset);
+      // Run validation through our API service with the selected method
+      const results = await runValidation(
+        selectedDataset, 
+        validationMethod, 
+        validationMethod === 'custom' ? customSQL : undefined
+      );
       setValidationResults(results);
       
       const passCount = results.filter(r => r.status === "Pass").length;
@@ -121,7 +129,7 @@ const Validation = () => {
     }
   };
 
-  // Generate example Soda Core YAML configuration based on selected dataset
+  // Generate example Soda Core YAML configuration based on selected dataset and validation method
   const validationSnippet = `
 # Example Soda Core validation YAML
 profile: postgres
@@ -129,11 +137,26 @@ datasets:
   ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
     checks:
       - row_count > 0
-      - missing_count(customer_id) = 0
+      - missing_count(customer_id) = 0${validationMethod === 'advanced' ? `
       - invalid_percent(email) < 5
       - duplicate_count(id) = 0
       - avg_length(description) > 10
+      - schema:
+          name: string
+          age: integer
+          email: string` : ''}${validationMethod === 'custom' ? `
+      - sql:
+          query: ${customSQL.replace(/\n/g, '\n          ')}
+          metrics:
+            - row_count
+          tests:
+            - row_count > 0` : ''}
 `;
+
+  // Find the validation timestamp for display
+  const validationDate = validationResults.length > 0 
+    ? new Date(validationResults[0].timestamp)
+    : null;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -285,26 +308,45 @@ datasets:
                   <Database className="mr-2 h-5 w-5 text-blue-600" />
                   Validation Results
                 </span>
-                {selectedDataset && datasets.find(d => d.id === selectedDataset) && (
-                  <span className="text-base font-normal text-slate-500">
-                    {datasets.find(d => d.id === selectedDataset)?.name}
-                  </span>
-                )}
+                <div className="flex items-center">
+                  {selectedDataset && datasets.find(d => d.id === selectedDataset) && (
+                    <span className="mr-4 text-base font-normal text-slate-500">
+                      {datasets.find(d => d.id === selectedDataset)?.name}
+                    </span>
+                  )}
+                  {validationDate && (
+                    <span className="flex items-center text-sm text-slate-400">
+                      <Calendar className="mr-1 h-4 w-4" />
+                      {validationDate.toLocaleDateString() + ' ' + validationDate.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </CardTitle>
               {validationResults.length > 0 && (
-                <div className="flex space-x-4 text-sm">
-                  <div className="flex items-center">
-                    <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
-                    <span>{validationResults.filter(r => r.status === "Pass").length} Passed</span>
+                <div className="flex flex-wrap items-center justify-between gap-y-2">
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="flex items-center">
+                      <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
+                      <span>{validationResults.filter(r => r.status === "Pass").length} Passed</span>
+                    </div>
+                    <div className="flex items-center">
+                      <AlertTriangle className="mr-1 h-4 w-4 text-amber-500" />
+                      <span>{validationResults.filter(r => r.status === "Warning").length} Warnings</span>
+                    </div>
+                    <div className="flex items-center">
+                      <XCircle className="mr-1 h-4 w-4 text-red-500" />
+                      <span>{validationResults.filter(r => r.status === "Fail").length} Failed</span>
+                    </div>
                   </div>
-                  <div className="flex items-center">
-                    <AlertTriangle className="mr-1 h-4 w-4 text-amber-500" />
-                    <span>{validationResults.filter(r => r.status === "Warning").length} Warnings</span>
-                  </div>
-                  <div className="flex items-center">
-                    <XCircle className="mr-1 h-4 w-4 text-red-500" />
-                    <span>{validationResults.filter(r => r.status === "Fail").length} Failed</span>
-                  </div>
+                  
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => navigate('/reports')}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    View Detailed Report
+                  </Button>
                 </div>
               )}
               <Separator />

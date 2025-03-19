@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Database, Shield, GitCompare, BarChart3 } from "lucide-react";
+import { Menu, X, Database, Shield, GitCompare, BarChart3, FileText } from "lucide-react";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -17,6 +17,7 @@ const Navbar = () => {
     { name: "Datasets", path: "/datasets", icon: <Database className="mr-2 h-4 w-4" /> },
     { name: "Validation", path: "/validation", icon: <Shield className="mr-2 h-4 w-4" /> },
     { name: "Comparison", path: "/comparison", icon: <GitCompare className="mr-2 h-4 w-4" /> },
+    { name: "Reports", path: "/reports", icon: <FileText className="mr-2 h-4 w-4" /> },
   ];
 
   return (
