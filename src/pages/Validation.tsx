@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,28 +18,45 @@ import {
   ChevronRight, 
   Terminal,
   Copy,
-  Database
+  Database,
+  Loader2
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
+import { getDatasets, runValidation, DatasetType, ValidationResult } from "@/services/api";
 
 const Validation = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [validationMethod, setValidationMethod] = useState("basic");
   const [customSQL, setCustomSQL] = useState("");
-  const [validationResults, setValidationResults] = useState<any[]>([]);
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
+  const [datasets, setDatasets] = useState<DatasetType[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock datasets
-  const datasets = [
-    { id: "1", name: "Sales_Q2_2023", type: "CSV" },
-    { id: "2", name: "Customer_Data_July", type: "Excel" },
-    { id: "3", name: "Inventory_Database", type: "PostgreSQL" },
-    { id: "4", name: "Marketing_Metrics", type: "CSV" },
-    { id: "5", name: "Product_Catalog", type: "Excel" },
-  ];
+  useEffect(() => {
+    // Fetch datasets when component mounts
+    fetchDatasets();
+  }, []);
 
-  const handleRunValidation = () => {
+  const fetchDatasets = async () => {
+    setLoading(true);
+    try {
+      const data = await getDatasets();
+      setDatasets(data);
+    } catch (error) {
+      console.error("Error fetching datasets:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch datasets. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRunValidation = async () => {
     if (!selectedDataset) {
       toast({
         title: "No dataset selected",
@@ -52,54 +69,32 @@ const Validation = () => {
     setIsRunning(true);
     setValidationResults([]);
 
-    // Simulate validation process
-    setTimeout(() => {
-      const mockResults = [
-        { 
-          id: 1, 
-          check: "Column Completeness", 
-          status: "Pass", 
-          details: "All required columns are present",
-          timestamp: new Date().toISOString()
-        },
-        { 
-          id: 2, 
-          check: "Data Type Validation", 
-          status: "Pass", 
-          details: "All data types match schema definition",
-          timestamp: new Date().toISOString()
-        },
-        { 
-          id: 3, 
-          check: "Null Values Check", 
-          status: "Warning", 
-          details: "Found 15 null values in 'email' column",
-          timestamp: new Date().toISOString()
-        },
-        { 
-          id: 4, 
-          check: "Unique Constraint", 
-          status: "Fail", 
-          details: "Found 3 duplicate entries in primary key 'id'",
-          timestamp: new Date().toISOString()
-        },
-        { 
-          id: 5, 
-          check: "Value Range Check", 
-          status: "Pass", 
-          details: "All values are within expected ranges",
-          timestamp: new Date().toISOString()
-        },
-      ];
+    try {
+      // Run the validation through our API service
+      const results = await runValidation(selectedDataset);
+      setValidationResults(results);
       
-      setValidationResults(mockResults);
-      setIsRunning(false);
+      const passCount = results.filter(r => r.status === "Pass").length;
+      const warningCount = results.filter(r => r.status === "Warning").length;
+      const failCount = results.filter(r => r.status === "Fail").length;
       
       toast({
         title: "Validation complete",
-        description: `Completed with ${mockResults.filter(r => r.status === "Pass").length} passes, ${mockResults.filter(r => r.status === "Warning").length} warnings, and ${mockResults.filter(r => r.status === "Fail").length} failures.`,
+        description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
       });
-    }, 3000);
+      
+      // Refresh datasets to get updated status
+      fetchDatasets();
+    } catch (error) {
+      console.error("Validation error:", error);
+      toast({
+        title: "Validation Failed",
+        description: "There was an error running the validation. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRunning(false);
+    }
   };
 
   const getResultIcon = (status: string) => {
@@ -132,7 +127,7 @@ const Validation = () => {
 # Example Soda Core validation YAML
 profile: postgres
 datasets:
-  ${selectedDataset || 'your_dataset'}:
+  ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
     checks:
       - row_count > 0
       - missing_count(customer_id) = 0
@@ -174,11 +169,15 @@ datasets:
                     onChange={(e) => setSelectedDataset(e.target.value)}
                   >
                     <option value="">Select a dataset...</option>
-                    {datasets.map((ds) => (
-                      <option key={ds.id} value={ds.id}>
-                        {ds.name} ({ds.type})
-                      </option>
-                    ))}
+                    {loading ? (
+                      <option value="" disabled>Loading datasets...</option>
+                    ) : (
+                      datasets.map((ds) => (
+                        <option key={ds.id} value={ds.id}>
+                          {ds.name} ({ds.type})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 

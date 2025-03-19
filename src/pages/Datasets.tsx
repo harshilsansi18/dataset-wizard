@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,44 +17,74 @@ import {
   MoreVertical, 
   Globe, 
   ServerCrash, 
-  FileSpreadsheet 
+  FileSpreadsheet,
+  Loader2
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "@/components/ui/use-toast";
+import { uploadDataset, getDatasets, DatasetType } from "@/services/api";
 
 const Datasets = () => {
   const [uploading, setUploading] = useState(false);
   const [connectingDb, setConnectingDb] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [datasets, setDatasets] = useState<DatasetType[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock datasets
-  const datasetsList = [
-    { id: 1, name: "Sales_Q2_2023", type: "CSV", size: "4.2 MB", lastUpdated: "2023-07-15", status: "Validated" },
-    { id: 2, name: "Customer_Data_July", type: "Excel", size: "12.8 MB", lastUpdated: "2023-07-10", status: "Issues Found" },
-    { id: 3, name: "Inventory_Database", type: "PostgreSQL", size: "23 tables", lastUpdated: "2023-07-08", status: "Validated" },
-    { id: 4, name: "Marketing_Metrics", type: "CSV", size: "1.7 MB", lastUpdated: "2023-07-05", status: "Not Validated" },
-    { id: 5, name: "Product_Catalog", type: "Excel", size: "8.5 MB", lastUpdated: "2023-06-30", status: "Validated" },
-  ];
+  useEffect(() => {
+    // Fetch datasets when component mounts
+    fetchDatasets();
+  }, []);
 
-  const filteredDatasets = datasetsList.filter(dataset => 
+  const fetchDatasets = async () => {
+    setLoading(true);
+    try {
+      const data = await getDatasets();
+      setDatasets(data);
+    } catch (error) {
+      console.error("Error fetching datasets:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch datasets. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredDatasets = datasets.filter(dataset => 
     dataset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     dataset.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
     dataset.status.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       setUploading(true);
       
-      // Simulate upload process
-      setTimeout(() => {
-        setUploading(false);
+      try {
+        const uploadPromises = Array.from(files).map(file => uploadDataset(file));
+        const uploadedDatasets = await Promise.all(uploadPromises);
+        
+        // Refresh datasets list
+        await fetchDatasets();
+        
         toast({
           title: "Upload Successful",
           description: `${files.length} file(s) have been uploaded.`,
         });
-      }, 2000);
+      } catch (error) {
+        console.error("Upload error:", error);
+        toast({
+          title: "Upload Failed",
+          description: "There was an error uploading your file(s). Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -143,6 +173,7 @@ const Datasets = () => {
                         onChange={handleFileUpload}
                         accept=".csv,.xlsx,.xls,.txt"
                         multiple
+                        disabled={uploading}
                       />
                     </div>
                   </div>
@@ -150,7 +181,14 @@ const Datasets = () => {
                 <CardFooter className="justify-between">
                   <p className="text-sm text-slate-500">Max file size: 100MB</p>
                   <Button disabled={uploading}>
-                    {uploading ? "Uploading..." : "Upload"}
+                    {uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      "Upload"
+                    )}
                   </Button>
                 </CardFooter>
               </Card>
@@ -243,11 +281,18 @@ const Datasets = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredDatasets.length === 0 ? (
+                {loading ? (
+                  <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-center dark:border-slate-600">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                      Loading datasets...
+                    </p>
+                  </div>
+                ) : filteredDatasets.length === 0 ? (
                   <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 p-6 text-center dark:border-slate-600">
                     <Database className="h-8 w-8 text-slate-400" />
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                      No datasets match your search
+                      {searchQuery ? "No datasets match your search" : "No datasets yet. Upload your first dataset!"}
                     </p>
                   </div>
                 ) : (
