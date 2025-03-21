@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -117,7 +116,6 @@ const Reports = () => {
       ? new Date(validationResults[selectedDataset][0].timestamp) 
       : null;
 
-  // Export report functionality
   const exportReport = () => {
     if (!selectedDataset || !filteredResults.length) {
       toast({
@@ -129,12 +127,10 @@ const Reports = () => {
     }
 
     try {
-      // Format the data for export
       const datasetName = selectedDatasetInfo?.name || "report";
       const date = new Date().toISOString().split('T')[0];
       const reportTitle = `Validation Report: ${datasetName} (${date})`;
       
-      // Create CSV content
       let csvContent = "Check,Status,Details,Timestamp\n";
       
       filteredResults.forEach(result => {
@@ -148,7 +144,6 @@ const Reports = () => {
         csvContent += formattedRow + '\n';
       });
       
-      // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -175,13 +170,11 @@ const Reports = () => {
     }
   };
 
-  // View result details
   const viewResultDetails = (result: ValidationResult) => {
     setSelectedResult(result);
     setIsDetailOpen(true);
   };
 
-  // Close detail dialog
   const closeDetails = () => {
     setIsDetailOpen(false);
     setSelectedResult(null);
@@ -203,7 +196,6 @@ const Reports = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
-        {/* Left sidebar - Dataset selection */}
         <div className="md:col-span-1">
           <Card>
             <CardHeader>
@@ -273,7 +265,6 @@ const Reports = () => {
           </Card>
         </div>
 
-        {/* Main content - Report details */}
         <div className="md:col-span-3">
           <Card className="h-full">
             <CardHeader>
@@ -433,7 +424,6 @@ const Reports = () => {
         </div>
       </div>
 
-      {/* Detail view dialog */}
       <Dialog open={isDetailOpen} onOpenChange={closeDetails}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>

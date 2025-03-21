@@ -116,7 +116,7 @@ export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
   return new Promise((resolve) => {
     setTimeout(() => {
       const id = `ds_${Date.now()}`;
-      const newDataset = { 
+      const newDataset: DatasetType = { 
         ...dataset, 
         id,
         status: "Not Validated",
@@ -338,11 +338,10 @@ export const runValidation = (
   });
 };
 
-export const getAllValidationResults = (): Promise<ValidationResult[]> => {
+export const getAllValidationResults = (): Promise<Record<string, ValidationResult[]>> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      const allResults = Object.values(validationResultsStore).flat();
-      resolve(allResults);
+      resolve(validationResultsStore);
     }, 500);
   });
 };
