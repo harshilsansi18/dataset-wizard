@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import { 
   Shield, 
   Play, 
@@ -35,6 +36,8 @@ const Validation = () => {
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
     // Fetch datasets when component mounts
@@ -58,6 +61,51 @@ const Validation = () => {
     }
   };
 
+  // Simulates validation progress steps for better UX
+  const simulateValidationProgress = () => {
+    setProgress(0);
+    setLogs([]);
+    
+    const stageTimeline = [
+      { progress: 10, log: "Connecting to validation engine..." },
+      { progress: 20, log: "Loading dataset schema..." },
+      { progress: 30, log: `Preparing ${validationMethod} validation checks...` },
+      { progress: 50, log: "Analyzing data content..." },
+      { progress: 70, log: "Running validation tests..." },
+      { progress: 90, log: "Finalizing results..." },
+    ];
+    
+    // Add method-specific logs
+    if (validationMethod === "advanced") {
+      stageTimeline.splice(3, 0, 
+        { progress: 40, log: "Checking for schema consistency..." }
+      );
+    }
+    
+    if (validationMethod === "custom" && customSQL) {
+      stageTimeline.splice(4, 0, 
+        { progress: 60, log: `Processing custom SQL: ${customSQL.substring(0, 30)}...` }
+      );
+    }
+    
+    let currentStage = 0;
+    
+    const progressInterval = setInterval(() => {
+      if (currentStage < stageTimeline.length) {
+        const stage = stageTimeline[currentStage];
+        setProgress(stage.progress);
+        setLogs(prev => [...prev, stage.log]);
+        currentStage++;
+      } else {
+        setProgress(100);
+        setLogs(prev => [...prev, "Validation complete!"]);
+        clearInterval(progressInterval);
+      }
+    }, 500);
+    
+    return progressInterval;
+  };
+
   const handleRunValidation = async () => {
     if (!selectedDataset) {
       toast({
@@ -70,6 +118,9 @@ const Validation = () => {
 
     setIsRunning(true);
     setValidationResults([]);
+    
+    // Start progress simulation
+    const progressInterval = simulateValidationProgress();
 
     try {
       // Run validation through our API service with the selected method
@@ -78,6 +129,11 @@ const Validation = () => {
         validationMethod, 
         validationMethod === 'custom' ? customSQL : undefined
       );
+      
+      // Ensure progress reaches 100% before showing results
+      setProgress(100);
+      clearInterval(progressInterval);
+      
       setValidationResults(results);
       
       const passCount = results.filter(r => r.status === "Pass").length;
@@ -93,6 +149,8 @@ const Validation = () => {
       fetchDatasets();
     } catch (error) {
       console.error("Validation error:", error);
+      clearInterval(progressInterval);
+      setProgress(0);
       toast({
         title: "Validation Failed",
         description: error instanceof Error ? error.message : "There was an error running the validation. Please try again.",
@@ -353,10 +411,22 @@ datasets:
             </CardHeader>
             <CardContent>
               {isRunning ? (
-                <div className="flex h-64 flex-col items-center justify-center">
-                  <Shield className="mb-4 h-12 w-12 animate-pulse text-blue-500" />
-                  <p className="text-lg font-medium">Running validation checks...</p>
-                  <p className="text-sm text-slate-500">This may take a few moments</p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Validation in progress...</span>
+                      <span className="text-sm text-slate-500">{progress}%</span>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                    {logs.map((log, i) => (
+                      <div key={i} className="py-1 pl-2 font-mono text-xs">
+                        <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : validationResults.length === 0 ? (
                 <div className="flex h-64 flex-col items-center justify-center">
