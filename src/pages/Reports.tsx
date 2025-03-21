@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +15,21 @@ import {
   AlertTriangle,
   ArrowLeft,
   Search,
-  Filter
+  Filter,
+  Eye
 } from "lucide-react";
 import { getAllValidationResults, getDatasets, DatasetType, ValidationResult } from "@/services/api";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion } from "framer-motion";
 import { toast } from "@/components/ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -31,6 +39,8 @@ const Reports = () => {
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [selectedResult, setSelectedResult] = useState<ValidationResult | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   
   useEffect(() => {
     fetchData();
@@ -107,6 +117,76 @@ const Reports = () => {
       ? new Date(validationResults[selectedDataset][0].timestamp) 
       : null;
 
+  // Export report functionality
+  const exportReport = () => {
+    if (!selectedDataset || !filteredResults.length) {
+      toast({
+        title: "Export Failed",
+        description: "No results to export",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Format the data for export
+      const datasetName = selectedDatasetInfo?.name || "report";
+      const date = new Date().toISOString().split('T')[0];
+      const reportTitle = `Validation Report: ${datasetName} (${date})`;
+      
+      // Create CSV content
+      let csvContent = "Check,Status,Details,Timestamp\n";
+      
+      filteredResults.forEach(result => {
+        const formattedRow = [
+          `"${result.check}"`,
+          `"${result.status}"`,
+          `"${result.details.replace(/"/g, '""')}"`,
+          `"${new Date(result.timestamp).toLocaleString()}"`
+        ].join(',');
+        
+        csvContent += formattedRow + '\n';
+      });
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${datasetName.replace(/\s+/g, '_')}_validation_report_${date}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Report Exported",
+        description: "The validation report has been downloaded",
+      });
+    } catch (error) {
+      console.error("Error exporting report:", error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export validation report",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // View result details
+  const viewResultDetails = (result: ValidationResult) => {
+    setSelectedResult(result);
+    setIsDetailOpen(true);
+  };
+
+  // Close detail dialog
+  const closeDetails = () => {
+    setIsDetailOpen(false);
+    setSelectedResult(null);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8 flex items-center justify-between">
@@ -177,6 +257,12 @@ const Reports = () => {
                               {dataset.status}
                             </div>
                           </div>
+                          {validationResults[dataset.id] && validationResults[dataset.id].length > 0 && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              <Calendar className="mr-1 inline-block h-3 w-3" />
+                              {new Date(validationResults[dataset.id][0].timestamp).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       );
                     })}
@@ -257,7 +343,12 @@ const Reports = () => {
                   </div>
                   
                   <div className="ml-auto">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={exportReport}
+                      disabled={!filteredResults.length}
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       Export Report
                     </Button>
@@ -322,7 +413,12 @@ const Reports = () => {
                             </div>
                           </div>
                           <div>
-                            <Button variant="ghost" size="sm">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => viewResultDetails(result)}
+                            >
+                              <Eye className="mr-1 h-4 w-4" />
                               View Details
                             </Button>
                           </div>
@@ -336,6 +432,73 @@ const Reports = () => {
           </Card>
         </div>
       </div>
+
+      {/* Detail view dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={closeDetails}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              {selectedResult && getResultIcon(selectedResult.status)}
+              <span className="ml-2">{selectedResult?.check}</span>
+            </DialogTitle>
+            <DialogDescription>
+              Validation executed on {selectedResult && new Date(selectedResult.timestamp).toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className={`mt-4 rounded-lg border p-4 ${selectedResult ? getResultClass(selectedResult.status) : ''}`}>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-slate-500">Status</h4>
+                <p className="font-medium">
+                  {selectedResult?.status}
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="text-sm font-medium text-slate-500">Details</h4>
+                <p>{selectedResult?.details}</p>
+              </div>
+              
+              {selectedResult?.check === "Row Count Check" && (
+                <div>
+                  <h4 className="text-sm font-medium text-slate-500">Row Information</h4>
+                  <p>
+                    {selectedResult.details.includes("rows") 
+                      ? `The dataset contains ${selectedResult.details.match(/\d+/)?.[0] || "unknown"} rows.`
+                      : "Row count information is not available."}
+                  </p>
+                </div>
+              )}
+              
+              {selectedResult?.check === "Null Values Check" && (
+                <div>
+                  <h4 className="text-sm font-medium text-slate-500">Null Values</h4>
+                  <p>
+                    {selectedResult.details.includes("null values") 
+                      ? `Found ${selectedResult.details.match(/\d+/)?.[0] || "0"} null values in the first column.`
+                      : "No null values were found in the first column."}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Null values can indicate missing data or data quality issues that may need to be addressed.
+                  </p>
+                </div>
+              )}
+              
+              {selectedResult?.check === "Data Type Validation" && (
+                <div>
+                  <h4 className="text-sm font-medium text-slate-500">Data Types</h4>
+                  <p>
+                    {selectedResult.details.includes("consistent numeric") 
+                      ? "All values in this column are consistent and have a numeric data type."
+                      : "This column contains mixed data types which may cause issues in data processing."}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

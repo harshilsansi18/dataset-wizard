@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -135,6 +136,73 @@ const Comparison = () => {
   };
 
   const comparisonDate = comparisonResults ? new Date() : null;
+
+  // Add export functionality
+  const exportComparisonReport = () => {
+    if (!comparisonResults) return;
+    
+    try {
+      const sourceDatasetName = datasets.find(d => d.id === sourceDataset)?.name || "source";
+      const targetDatasetName = datasets.find(d => d.id === targetDataset)?.name || "target";
+      
+      // Format filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const fileName = `comparison_${sourceDatasetName}_vs_${targetDatasetName}_${timestamp}.csv`;
+      
+      // Create CSV content based on active tab
+      let csvContent = "";
+      
+      if (activeTab === "summary") {
+        csvContent = "Metric,Value\n";
+        Object.entries(comparisonResults.summary).forEach(([key, value]) => {
+          csvContent += `"${key}","${value}"\n`;
+        });
+      } 
+      else if (activeTab === "columns") {
+        csvContent = "Column Name,Data Type,Match Status,Differences\n";
+        comparisonResults.columns.forEach(col => {
+          csvContent += `"${col.name}","${col.type}","${col.matches ? 'Matches' : 'Different'}",${col.differences}\n`;
+        });
+      }
+      else if (activeTab === "differences") {
+        csvContent = "Row Key,Column,Source Value,Target Value\n";
+        comparisonResults.differences.forEach(diff => {
+          csvContent += `"${diff.key}","${diff.column}","${diff.sourceValue}","${diff.targetValue}"\n`;
+        });
+      }
+      else if (activeTab === "missing") {
+        csvContent = "Row Key,Location,Data\n";
+        comparisonResults.missing.forEach(row => {
+          csvContent += `"${row.key}","${row.location}","${JSON.stringify(row.columns).replace(/"/g, '""')}"\n`;
+        });
+      }
+      
+      // Create and trigger download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', fileName);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export Complete",
+        description: `Comparison report has been downloaded as ${fileName}`,
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error exporting the comparison results.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -378,7 +446,11 @@ const Comparison = () => {
                           <Filter className="mr-1 h-4 w-4" />
                           Filter
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={exportComparisonReport}
+                        >
                           <Download className="mr-1 h-4 w-4" />
                           Export
                         </Button>
@@ -463,6 +535,17 @@ const Comparison = () => {
                           ))}
                         </ScrollArea>
                       </div>
+                      
+                      <div className="flex justify-end mt-4">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={exportComparisonReport}
+                        >
+                          <Download className="mr-1 h-4 w-4" />
+                          Export
+                        </Button>
+                      </div>
                     </motion.div>
                   )}
 
@@ -495,9 +578,13 @@ const Comparison = () => {
                                   className="h-9 rounded-md border border-input pl-8 pr-3 text-sm"
                                 />
                               </div>
-                              <Button variant="outline" size="sm">
-                                <Filter className="mr-1 h-4 w-4" />
-                                Filter
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={exportComparisonReport}
+                              >
+                                <Download className="mr-1 h-4 w-4" />
+                                Export
                               </Button>
                             </div>
                           </div>
@@ -556,9 +643,17 @@ const Comparison = () => {
                                 <Minus className="mr-1 h-4 w-4 text-red-500" />
                                 Missing in Source: {comparisonResults.missing.filter(m => m.location === "source").length}
                               </Button>
-                              <Button variant="outline" size="sm">
+                              <Button variant="outline" size="sm" className="mr-2">
                                 <Plus className="mr-1 h-4 w-4 text-blue-500" />
                                 Missing in Target: {comparisonResults.missing.filter(m => m.location === "target").length}
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={exportComparisonReport}
+                              >
+                                <Download className="mr-1 h-4 w-4" />
+                                Export
                               </Button>
                             </div>
                           </div>

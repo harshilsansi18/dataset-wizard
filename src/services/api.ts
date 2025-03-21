@@ -1,3 +1,4 @@
+
 // API service for handling file uploads and data validation
 
 export type DatasetType = {
@@ -50,11 +51,37 @@ export type ComparisonResultType = {
   }[];
 };
 
+// Initialize data from localStorage if it exists
+const LOCAL_STORAGE_KEYS = {
+  DATASETS: 'validation-app-datasets',
+  VALIDATION_RESULTS: 'validation-app-validation-results',
+  COMPARISON_RESULTS: 'validation-app-comparison-results'
+};
+
 // Mock datasets storage (in a real app, this would be in a database)
-let datasetsStore: DatasetType[] = [];
-let validationResultsStore: Record<string, ValidationResult[]> = {};
-let comparisonResultsStore: Record<string, ComparisonResultType> = {};
-let nextId = 1;
+let datasetsStore: DatasetType[] = loadFromLocalStorage(LOCAL_STORAGE_KEYS.DATASETS, []);
+let validationResultsStore: Record<string, ValidationResult[]> = loadFromLocalStorage(LOCAL_STORAGE_KEYS.VALIDATION_RESULTS, {});
+let comparisonResultsStore: Record<string, ComparisonResultType> = loadFromLocalStorage(LOCAL_STORAGE_KEYS.COMPARISON_RESULTS, {});
+let nextId = datasetsStore.length > 0 ? Math.max(...datasetsStore.map(ds => parseInt(ds.id))) + 1 : 1;
+
+// Functions for localStorage handling
+function loadFromLocalStorage<T>(key: string, defaultValue: T): T {
+  try {
+    const storedValue = localStorage.getItem(key);
+    return storedValue ? JSON.parse(storedValue) : defaultValue;
+  } catch (error) {
+    console.error("Error loading from localStorage:", error);
+    return defaultValue;
+  }
+}
+
+function saveToLocalStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error("Error saving to localStorage:", error);
+  }
+}
 
 // Format file size
 const formatFileSize = (bytes: number): string => {
@@ -122,6 +149,7 @@ export const uploadDataset = async (file: File): Promise<DatasetType> => {
       
       // Add to store
       datasetsStore.push(newDataset);
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.DATASETS, datasetsStore);
       
       resolve(newDataset);
     }, 1000); // Simulate network delay
@@ -357,6 +385,10 @@ export const runValidation = async (datasetId: string, method: string = 'basic',
       // Store validation results
       validationResultsStore[datasetId] = results;
       
+      // Save updated data to localStorage
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.DATASETS, datasetsStore);
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.VALIDATION_RESULTS, validationResultsStore);
+      
       resolve(results);
     } catch (error) {
       console.error('Error during validation:', error);
@@ -373,6 +405,10 @@ export const runValidation = async (datasetId: string, method: string = 'basic',
       
       // Store validation results
       validationResultsStore[datasetId] = errorResult;
+      
+      // Save updated data to localStorage
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.DATASETS, datasetsStore);
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.VALIDATION_RESULTS, validationResultsStore);
       
       resolve(errorResult);
     }
@@ -559,6 +595,9 @@ export const compareDatasets = async (sourceId: string, targetId: string, option
       
       // Cache the result
       comparisonResultsStore[cachedKey] = result;
+      
+      // Save to localStorage
+      saveToLocalStorage(LOCAL_STORAGE_KEYS.COMPARISON_RESULTS, comparisonResultsStore);
       
       resolve(result);
     } catch (error) {
