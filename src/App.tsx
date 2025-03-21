@@ -14,7 +14,6 @@ import Validation from "./pages/Validation";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
-import ThemeToggle from "./components/theme/theme-toggle";
 
 const queryClient = new QueryClient();
 
@@ -27,9 +26,6 @@ const App = () => (
         <BrowserRouter>
           <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
             <Navbar />
-            <div className="fixed right-4 top-4 z-50">
-              <ThemeToggle />
-            </div>
             <main>
               <Routes>
                 <Route path="/" element={<Index />} />
