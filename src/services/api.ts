@@ -1,5 +1,6 @@
 import { toast } from "@/components/ui/use-toast";
 import Papa from "papaparse";
+import { compareDatasets } from './comparisonService';
 
 export type DatasetType = {
   id: string;
@@ -268,8 +269,8 @@ export const compareDatasets = (sourceId: string, targetId: string, options: any
           throw new Error('One or both datasets have no content to compare');
         }
         
-        // Perform actual dataset comparison using our comparison service
-        const result = performComparison(sourceDataset, targetDataset);
+        // Use the imported compareDatasets function from comparisonService
+        const result = compareDatasets(sourceDataset, targetDataset);
         
         // Store the result for future reference
         const comparisonId = `comp_${Date.now()}`;
@@ -600,3 +601,4 @@ function generateMissingRows(sourceDataset: DatasetType, targetDataset: DatasetT
   
   return missing;
 }
+
