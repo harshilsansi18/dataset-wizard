@@ -16,7 +16,10 @@ import {
 } from "./validationService";
 
 import {
-  compareDatasetsByIds
+  compareDatasetsByIds,
+  getAllComparisonResults as getAllSavedComparisonResults,
+  getComparisonResultById as getSavedComparisonResult,
+  getComparisonHistory as getComparisonHistoryList
 } from "./comparisonService";
 
 // Re-export dataset functions
@@ -31,8 +34,11 @@ export const deleteDataset = removeDataset;
 export const runValidation = validateDataset;
 export const getAllValidationResults = getValidationResults;
 
-// Re-export comparison function with correct implementation
+// Re-export comparison functions
 export const compareDatasets = compareDatasetsByIds;
+export const getAllComparisonResults = getAllSavedComparisonResults;
+export const getComparisonResultById = getSavedComparisonResult;
+export const getComparisonHistory = getComparisonHistoryList;
 
 // Re-export types for backward compatibility
 export type { DatasetType, ValidationResult, ComparisonResultType };

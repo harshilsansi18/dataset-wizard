@@ -23,6 +23,7 @@ export type ValidationResult = {
 };
 
 export type ComparisonResultType = {
+  id?: string; // Added ID field
   summary: {
     rowsAnalyzed: number;
     rowsMatched: number;

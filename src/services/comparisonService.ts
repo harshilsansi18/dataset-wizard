@@ -1,8 +1,8 @@
-
 import { DatasetType, ComparisonResultType } from './types';
 
 // Persistent storage using localStorage
 const COMPARISON_RESULTS_STORAGE_KEY = "soda_core_comparison_results";
+const COMPARISON_HISTORY_KEY = "soda_core_comparison_history";
 
 // Initialize comparison results store
 const initializeComparisonStore = () => {
@@ -15,8 +15,20 @@ const initializeComparisonStore = () => {
   }
 };
 
+// Initialize comparison history
+const initializeComparisonHistory = () => {
+  try {
+    const storedData = localStorage.getItem(COMPARISON_HISTORY_KEY);
+    return storedData ? JSON.parse(storedData) : [];
+  } catch (error) {
+    console.error(`Error initializing store for comparison history:`, error);
+    return [];
+  }
+};
+
 // Store comparison results
 let comparisonResultsStore: { [key: string]: ComparisonResultType } = initializeComparisonStore();
+let comparisonHistoryStore: any[] = initializeComparisonHistory();
 
 // Save comparison results to localStorage
 const saveComparisonToStorage = (data: any) => {
@@ -24,6 +36,15 @@ const saveComparisonToStorage = (data: any) => {
     localStorage.setItem(COMPARISON_RESULTS_STORAGE_KEY, JSON.stringify(data));
   } catch (error) {
     console.error(`Error saving to ${COMPARISON_RESULTS_STORAGE_KEY}:`, error);
+  }
+};
+
+// Save comparison history to localStorage
+const saveComparisonHistoryToStorage = (data: any) => {
+  try {
+    localStorage.setItem(COMPARISON_HISTORY_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error saving to ${COMPARISON_HISTORY_KEY}:`, error);
   }
 };
 
@@ -175,6 +196,33 @@ export const compareDatasets = (source: DatasetType, target: DatasetType): Compa
   };
 };
 
+// Get all saved comparison results
+export const getAllComparisonResults = (): Promise<{ [key: string]: ComparisonResultType }> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(comparisonResultsStore);
+    }, 300);
+  });
+};
+
+// Get comparison result by ID
+export const getComparisonResultById = (id: string): Promise<ComparisonResultType | undefined> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(comparisonResultsStore[id]);
+    }, 300);
+  });
+};
+
+// Get comparison history
+export const getComparisonHistory = (): Promise<any[]> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(comparisonHistoryStore);
+    }, 300);
+  });
+};
+
 // Function to compare datasets with API-like interface
 export const compareDatasetsByIds = (sourceId: string, targetId: string, options: any = {}): Promise<ComparisonResultType> => {
   return new Promise((resolve, reject) => {
@@ -200,8 +248,31 @@ export const compareDatasetsByIds = (sourceId: string, targetId: string, options
         
         // Store the result for future reference
         const comparisonId = `comp_${Date.now()}`;
+        result.id = comparisonId; // Add an ID to the result
+        
+        // Store the comparison result
         comparisonResultsStore[comparisonId] = result;
         saveComparisonToStorage(comparisonResultsStore);
+        
+        // Add to comparison history
+        const historyEntry = {
+          id: comparisonId,
+          sourceId,
+          targetId,
+          sourceName: sourceDataset.name,
+          targetName: targetDataset.name,
+          timestamp: new Date().toISOString(),
+          summary: result.summary
+        };
+        
+        comparisonHistoryStore.unshift(historyEntry); // Add to beginning of array
+        
+        // Limit history to 50 entries
+        if (comparisonHistoryStore.length > 50) {
+          comparisonHistoryStore = comparisonHistoryStore.slice(0, 50);
+        }
+        
+        saveComparisonHistoryToStorage(comparisonHistoryStore);
         
         resolve(result);
       } catch (error) {
