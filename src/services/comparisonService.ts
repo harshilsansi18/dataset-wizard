@@ -1,40 +1,33 @@
 
-import { DatasetType } from './api';
+import { DatasetType, ComparisonResultType } from './types';
 
-export type ComparisonResultType = {
-  summary: {
-    rowsAnalyzed: number;
-    rowsMatched: number;
-    rowsDifferent: number;
-    rowsMissingSource: number;
-    rowsMissingTarget: number;
-    columnsCompared: number;
-    columnsDifferent: number;
-    executionTime: string;
-  };
-  columns: {
-    id: string;
-    name: string;
-    type: string;
-    matches: boolean;
-    differences: number;
-  }[];
-  differences: {
-    id: string;
-    key: string;
-    column: string;
-    sourceValue: string;
-    targetValue: string;
-  }[];
-  missing: {
-    id: string;
-    key: string;
-    location: "source" | "target";
-    columns: any;
-  }[];
+// Persistent storage using localStorage
+const COMPARISON_RESULTS_STORAGE_KEY = "soda_core_comparison_results";
+
+// Initialize comparison results store
+const initializeComparisonStore = () => {
+  try {
+    const storedData = localStorage.getItem(COMPARISON_RESULTS_STORAGE_KEY);
+    return storedData ? JSON.parse(storedData) : {};
+  } catch (error) {
+    console.error(`Error initializing store for comparison results:`, error);
+    return {};
+  }
 };
 
-// Perform actual comparison between two datasets
+// Store comparison results
+let comparisonResultsStore: { [key: string]: ComparisonResultType } = initializeComparisonStore();
+
+// Save comparison results to localStorage
+const saveComparisonToStorage = (data: any) => {
+  try {
+    localStorage.setItem(COMPARISON_RESULTS_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error saving to ${COMPARISON_RESULTS_STORAGE_KEY}:`, error);
+  }
+};
+
+// Main function to compare two datasets
 export const compareDatasets = (source: DatasetType, target: DatasetType): ComparisonResultType => {
   const startTime = performance.now();
   
@@ -180,4 +173,41 @@ export const compareDatasets = (source: DatasetType, target: DatasetType): Compa
     differences,
     missing: missingRows
   };
+};
+
+// Function to compare datasets with API-like interface
+export const compareDatasetsByIds = (sourceId: string, targetId: string, options: any = {}): Promise<ComparisonResultType> => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      try {
+        // Get datasets from localStorage
+        const storedData = localStorage.getItem("soda_core_datasets");
+        const datasets = storedData ? JSON.parse(storedData) : {};
+        
+        const sourceDataset = datasets[sourceId];
+        const targetDataset = datasets[targetId];
+        
+        if (!sourceDataset || !targetDataset) {
+          throw new Error(`Dataset not found. Source: ${!!sourceDataset}, Target: ${!!targetDataset}`);
+        }
+        
+        if (!sourceDataset.content || !targetDataset.content) {
+          throw new Error('One or both datasets have no content to compare');
+        }
+        
+        // Use the internal compareDatasets function
+        const result = compareDatasets(sourceDataset, targetDataset);
+        
+        // Store the result for future reference
+        const comparisonId = `comp_${Date.now()}`;
+        comparisonResultsStore[comparisonId] = result;
+        saveComparisonToStorage(comparisonResultsStore);
+        
+        resolve(result);
+      } catch (error) {
+        console.error("Comparison error:", error);
+        reject(error);
+      }
+    }, 1000);
+  });
 };

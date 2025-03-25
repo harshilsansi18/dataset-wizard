@@ -16,6 +16,7 @@ import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
+// Create a new queryClient with default settings
 const queryClient = new QueryClient();
 
 const App = () => (
