@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 
 import Navbar from "@/components/navigation/Navbar";
+import AIChatbot from "@/components/AIChatbot";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
@@ -37,6 +38,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
+            <AIChatbot />
           </div>
         </BrowserRouter>
       </TooltipProvider>

@@ -264,34 +264,24 @@ export const compareDatasets = (sourceId: string, targetId: string, options: any
           throw new Error(`Dataset not found. Source: ${!!sourceDataset}, Target: ${!!targetDataset}`);
         }
         
-        // In a real implementation, this would compare the actual datasets
-        // For now, we'll create a placeholder result
-        const result: ComparisonResultType = {
-          summary: {
-            rowsAnalyzed: Math.max(sourceDataset.rowCount, targetDataset.rowCount),
-            rowsMatched: Math.min(sourceDataset.rowCount, targetDataset.rowCount) - 5,
-            rowsDifferent: 5,
-            rowsMissingSource: targetDataset.rowCount > sourceDataset.rowCount ? targetDataset.rowCount - sourceDataset.rowCount : 0,
-            rowsMissingTarget: sourceDataset.rowCount > targetDataset.rowCount ? sourceDataset.rowCount - targetDataset.rowCount : 0,
-            columnsCompared: Math.min(sourceDataset.columnCount, targetDataset.columnCount),
-            columnsDifferent: Math.abs(sourceDataset.columnCount - targetDataset.columnCount) + 2,
-            executionTime: `${(Math.random() * 2 + 0.5).toFixed(2)}s`,
-          },
-          columns: generateComparisonColumns(sourceDataset, targetDataset),
-          differences: generateDifferences(sourceDataset, targetDataset),
-          missing: generateMissingRows(sourceDataset, targetDataset),
-        };
+        if (!sourceDataset.content || !targetDataset.content) {
+          throw new Error('One or both datasets have no content to compare');
+        }
+        
+        // Perform actual dataset comparison using our comparison service
+        const result = performComparison(sourceDataset, targetDataset);
         
         // Store the result for future reference
         const comparisonId = `comp_${Date.now()}`;
         comparisonResultsStore[comparisonId] = result;
+        saveToStorage(COMPARISON_RESULTS_STORAGE_KEY, comparisonResultsStore);
         
         resolve(result);
       } catch (error) {
         console.error("Comparison error:", error);
         reject(error);
       }
-    }, 1500);
+    }, 1000);
   });
 };
 
