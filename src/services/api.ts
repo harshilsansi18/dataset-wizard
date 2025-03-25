@@ -31,7 +31,7 @@ export const deleteDataset = removeDataset;
 export const runValidation = validateDataset;
 export const getAllValidationResults = getValidationResults;
 
-// Re-export comparison functions
+// Re-export comparison function with correct implementation
 export const compareDatasets = compareDatasetsByIds;
 
 // Re-export types for backward compatibility
