@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -366,341 +365,342 @@ const Comparison = () => {
                   <TabsTrigger value="differences">Differences</TabsTrigger>
                   <TabsTrigger value="missing">Missing Rows</TabsTrigger>
                 </TabsList>
-              </Tabs>
-            </CardHeader>
-            <CardContent>
-              {isComparing ? (
-                <div className="flex h-64 flex-col items-center justify-center">
-                  <GitCompare className="mb-4 h-12 w-12 animate-pulse text-blue-500" />
-                  <p className="text-lg font-medium">Comparing datasets...</p>
-                  <p className="text-sm text-slate-500">This may take a few moments</p>
-                </div>
-              ) : !comparisonResults ? (
-                <div className="flex h-64 flex-col items-center justify-center">
-                  <GitCompare className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
-                  <p className="text-lg font-medium">No comparison results yet</p>
-                  <p className="text-sm text-slate-500">
-                    Select source and target datasets to compare
-                  </p>
-                </div>
-              ) : (
-                <TabsContent value={activeTab} className="mt-0">
-                  {activeTab === "summary" && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                      className="space-y-6"
-                    >
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                          <h3 className="mb-2 text-sm font-medium text-slate-500">Rows Analyzed</h3>
-                          <p className="text-2xl font-bold">{comparisonResults.summary.rowsAnalyzed}</p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                          <h3 className="mb-2 text-sm font-medium text-slate-500">Execution Time</h3>
-                          <p className="text-2xl font-bold">{comparisonResults.summary.executionTime}</p>
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                        <h3 className="mb-4 text-sm font-medium text-slate-500">Row Comparison Results</h3>
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div className="flex flex-col items-center justify-center rounded-lg bg-green-50 p-4 text-center dark:bg-green-900/20">
-                            <Check className="mb-2 h-8 w-8 text-green-500" />
-                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMatched}</p>
-                            <p className="text-sm text-slate-500">Rows Matched</p>
-                          </div>
-                          <div className="flex flex-col items-center justify-center rounded-lg bg-amber-50 p-4 text-center dark:bg-amber-900/20">
-                            <ArrowLeftRight className="mb-2 h-8 w-8 text-amber-500" />
-                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsDifferent}</p>
-                            <p className="text-sm text-slate-500">Rows Different</p>
-                          </div>
-                          <div className="flex flex-col items-center justify-center rounded-lg bg-red-50 p-4 text-center dark:bg-red-900/20">
-                            <X className="mb-2 h-8 w-8 text-red-500" />
-                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingSource + comparisonResults.summary.rowsMissingTarget}</p>
-                            <p className="text-sm text-slate-500">Rows Missing</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                          <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Source</h3>
-                          <div className="flex items-baseline justify-between">
-                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingSource}</p>
-                            <p className="text-sm text-slate-500">rows</p>
-                          </div>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                          <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Target</h3>
-                          <div className="flex items-baseline justify-between">
-                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingTarget}</p>
-                            <p className="text-sm text-slate-500">rows</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end">
-                        <Button variant="outline" size="sm" className="mr-2">
-                          <Filter className="mr-1 h-4 w-4" />
-                          Filter
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={exportComparisonReport}
+                
+                <CardContent>
+                  {isComparing ? (
+                    <div className="flex h-64 flex-col items-center justify-center">
+                      <GitCompare className="mb-4 h-12 w-12 animate-pulse text-blue-500" />
+                      <p className="text-lg font-medium">Comparing datasets...</p>
+                      <p className="text-sm text-slate-500">This may take a few moments</p>
+                    </div>
+                  ) : !comparisonResults ? (
+                    <div className="flex h-64 flex-col items-center justify-center">
+                      <GitCompare className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+                      <p className="text-lg font-medium">No comparison results yet</p>
+                      <p className="text-sm text-slate-500">
+                        Select source and target datasets to compare
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <TabsContent value="summary" className="mt-0">
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
+                          className="space-y-6"
                         >
-                          <Download className="mr-1 h-4 w-4" />
-                          Export
-                        </Button>
-                      </div>
-                    </motion.div>
-                  )}
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                              <h3 className="mb-2 text-sm font-medium text-slate-500">Rows Analyzed</h3>
+                              <p className="text-2xl font-bold">{comparisonResults.summary.rowsAnalyzed}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                              <h3 className="mb-2 text-sm font-medium text-slate-500">Execution Time</h3>
+                              <p className="text-2xl font-bold">{comparisonResults.summary.executionTime}</p>
+                            </div>
+                          </div>
 
-                  {activeTab === "columns" && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className="mb-4 rounded-md bg-blue-50 p-4 dark:bg-blue-900/20">
-                        <p className="text-sm">
-                          <span className="font-medium">Column Analysis:</span> {comparisonResults.summary.columnsCompared} columns compared, 
-                          {comparisonResults.summary.columnsDifferent} columns with differences.
-                        </p>
-                      </div>
-                      
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-                        <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
-                          <div 
-                            className="flex cursor-pointer items-center font-medium"
-                            onClick={() => handleSort("name")}
-                          >
-                            Column Name {getSortIcon("name")}
+                          <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                            <h3 className="mb-4 text-sm font-medium text-slate-500">Row Comparison Results</h3>
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <div className="flex flex-col items-center justify-center rounded-lg bg-green-50 p-4 text-center dark:bg-green-900/20">
+                                <Check className="mb-2 h-8 w-8 text-green-500" />
+                                <p className="text-2xl font-bold">{comparisonResults.summary.rowsMatched}</p>
+                                <p className="text-sm text-slate-500">Rows Matched</p>
+                              </div>
+                              <div className="flex flex-col items-center justify-center rounded-lg bg-amber-50 p-4 text-center dark:bg-amber-900/20">
+                                <ArrowLeftRight className="mb-2 h-8 w-8 text-amber-500" />
+                                <p className="text-2xl font-bold">{comparisonResults.summary.rowsDifferent}</p>
+                                <p className="text-sm text-slate-500">Rows Different</p>
+                              </div>
+                              <div className="flex flex-col items-center justify-center rounded-lg bg-red-50 p-4 text-center dark:bg-red-900/20">
+                                <X className="mb-2 h-8 w-8 text-red-500" />
+                                <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingSource + comparisonResults.summary.rowsMissingTarget}</p>
+                                <p className="text-sm text-slate-500">Rows Missing</p>
+                              </div>
+                            </div>
                           </div>
-                          <div 
-                            className="flex cursor-pointer items-center font-medium"
-                            onClick={() => handleSort("type")}
-                          >
-                            Data Type {getSortIcon("type")}
-                          </div>
-                          <div 
-                            className="flex cursor-pointer items-center font-medium"
-                            onClick={() => handleSort("matches")}
-                          >
-                            Match Status {getSortIcon("matches")}
-                          </div>
-                          <div 
-                            className="flex cursor-pointer items-center font-medium"
-                            onClick={() => handleSort("differences")}
-                          >
-                            Differences {getSortIcon("differences")}
-                          </div>
-                        </div>
 
-                        <ScrollArea className="h-[300px]">
-                          {sortData(comparisonResults.columns, sortField || "name").map((column, index) => (
-                            <div 
-                              key={column.name} 
-                              className={`grid grid-cols-4 gap-4 p-3 ${
-                                index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50"
-                              }`}
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                              <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Source</h3>
+                              <div className="flex items-baseline justify-between">
+                                <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingSource}</p>
+                                <p className="text-sm text-slate-500">rows</p>
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                              <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Target</h3>
+                              <div className="flex items-baseline justify-between">
+                                <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingTarget}</p>
+                                <p className="text-sm text-slate-500">rows</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <Button variant="outline" size="sm" className="mr-2">
+                              <Filter className="mr-1 h-4 w-4" />
+                              Filter
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={exportComparisonReport}
                             >
-                              <div>{column.name}</div>
-                              <div>{column.type}</div>
-                              <div className="flex items-center">
-                                {column.matches ? (
-                                  <span className="flex items-center text-green-600 dark:text-green-400">
-                                    <Check className="mr-1 h-4 w-4" /> Matches
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center text-red-600 dark:text-red-400">
-                                    <X className="mr-1 h-4 w-4" /> Different
-                                  </span>
-                                )}
-                              </div>
-                              <div>
-                                {column.differences > 0 ? (
-                                  <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-800 dark:bg-red-900/30 dark:text-red-300">
-                                    {column.differences} differences
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-green-100 px-2 py-1 text-xs text-green-800 dark:bg-green-900/30 dark:text-green-300">
-                                    No differences
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </ScrollArea>
-                      </div>
-                      
-                      <div className="flex justify-end mt-4">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={exportComparisonReport}
+                              <Download className="mr-1 h-4 w-4" />
+                              Export
+                            </Button>
+                          </div>
+                        </motion.div>
+                      </TabsContent>
+
+                      <TabsContent value="columns" className="mt-0">
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
                         >
-                          <Download className="mr-1 h-4 w-4" />
-                          Export
-                        </Button>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {activeTab === "differences" && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {comparisonResults.differences.length === 0 ? (
-                        <div className="flex h-64 flex-col items-center justify-center">
-                          <Check className="mb-4 h-12 w-12 text-green-500" />
-                          <p className="text-lg font-medium">No differences found</p>
-                          <p className="text-sm text-slate-500">
-                            All values in both datasets match
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="mb-4 flex items-center justify-between">
-                            <p className="text-sm text-slate-500">
-                              Showing {comparisonResults.differences.length} differences
+                          <div className="mb-4 rounded-md bg-blue-50 p-4 dark:bg-blue-900/20">
+                            <p className="text-sm">
+                              <span className="font-medium">Column Analysis:</span> {comparisonResults.summary.columnsCompared} columns compared, 
+                              {comparisonResults.summary.columnsDifferent} columns with differences.
                             </p>
-                            <div className="flex items-center">
-                              <div className="relative mr-2">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
-                                <input
-                                  type="text"
-                                  placeholder="Search differences..."
-                                  className="h-9 rounded-md border border-input pl-8 pr-3 text-sm"
-                                />
+                          </div>
+                          
+                          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                            <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
+                              <div 
+                                className="flex cursor-pointer items-center font-medium"
+                                onClick={() => handleSort("name")}
+                              >
+                                Column Name {getSortIcon("name")}
                               </div>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={exportComparisonReport}
+                              <div 
+                                className="flex cursor-pointer items-center font-medium"
+                                onClick={() => handleSort("type")}
                               >
-                                <Download className="mr-1 h-4 w-4" />
-                                Export
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-                            <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
-                              <div className="font-medium">Row Key</div>
-                              <div className="font-medium">Column</div>
-                              <div className="font-medium">Source Value</div>
-                              <div className="font-medium">Target Value</div>
+                                Data Type {getSortIcon("type")}
+                              </div>
+                              <div 
+                                className="flex cursor-pointer items-center font-medium"
+                                onClick={() => handleSort("matches")}
+                              >
+                                Match Status {getSortIcon("matches")}
+                              </div>
+                              <div 
+                                className="flex cursor-pointer items-center font-medium"
+                                onClick={() => handleSort("differences")}
+                              >
+                                Differences {getSortIcon("differences")}
+                              </div>
                             </div>
 
                             <ScrollArea className="h-[300px]">
-                              {comparisonResults.differences.map((diff, index) => (
+                              {sortData(comparisonResults.columns, sortField || "name").map((column, index) => (
                                 <div 
-                                  key={diff.id} 
+                                  key={column.name} 
                                   className={`grid grid-cols-4 gap-4 p-3 ${
                                     index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50"
                                   }`}
                                 >
-                                  <div className="font-medium">{diff.key}</div>
-                                  <div>{diff.column}</div>
-                                  <div className="text-red-600 dark:text-red-400">{diff.sourceValue}</div>
-                                  <div className="text-green-600 dark:text-green-400">{diff.targetValue}</div>
-                                </div>
-                              ))}
-                            </ScrollArea>
-                          </div>
-                        </>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {activeTab === "missing" && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      {comparisonResults.missing.length === 0 ? (
-                        <div className="flex h-64 flex-col items-center justify-center">
-                          <Check className="mb-4 h-12 w-12 text-green-500" />
-                          <p className="text-lg font-medium">No missing rows</p>
-                          <p className="text-sm text-slate-500">
-                            All rows are present in both datasets
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="mb-4 flex items-center justify-between">
-                            <p className="text-sm text-slate-500">
-                              Found {comparisonResults.missing.length} missing rows
-                            </p>
-                            <div className="flex">
-                              <Button variant="outline" size="sm" className="mr-2">
-                                <Minus className="mr-1 h-4 w-4 text-red-500" />
-                                Missing in Source: {comparisonResults.missing.filter(m => m.location === "source").length}
-                              </Button>
-                              <Button variant="outline" size="sm" className="mr-2">
-                                <Plus className="mr-1 h-4 w-4 text-blue-500" />
-                                Missing in Target: {comparisonResults.missing.filter(m => m.location === "target").length}
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={exportComparisonReport}
-                              >
-                                <Download className="mr-1 h-4 w-4" />
-                                Export
-                              </Button>
-                            </div>
-                          </div>
-                          
-                          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-                            <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
-                              <div className="font-medium">Row Key</div>
-                              <div className="font-medium">Location</div>
-                              <div className="col-span-2 font-medium">Row Data</div>
-                            </div>
-
-                            <ScrollArea className="h-[300px]">
-                              {comparisonResults.missing.map((row, index) => (
-                                <div 
-                                  key={row.id} 
-                                  className={`grid grid-cols-4 gap-4 p-3 ${
-                                    index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50"
-                                  }`}
-                                >
-                                  <div className="font-medium">{row.key}</div>
-                                  <div>
-                                    {row.location === "source" ? (
-                                      <span className="flex items-center text-red-600 dark:text-red-400">
-                                        <Minus className="mr-1 h-4 w-4" /> Missing in Source
+                                  <div>{column.name}</div>
+                                  <div>{column.type}</div>
+                                  <div className="flex items-center">
+                                    {column.matches ? (
+                                      <span className="flex items-center text-green-600 dark:text-green-400">
+                                        <Check className="mr-1 h-4 w-4" /> Matches
                                       </span>
                                     ) : (
-                                      <span className="flex items-center text-blue-600 dark:text-blue-400">
-                                        <Plus className="mr-1 h-4 w-4" /> Missing in Target
+                                      <span className="flex items-center text-red-600 dark:text-red-400">
+                                        <X className="mr-1 h-4 w-4" /> Different
                                       </span>
                                     )}
                                   </div>
-                                  <div className="col-span-2">
-                                    <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
-                                      {JSON.stringify(row.columns)}
-                                    </code>
+                                  <div>
+                                    {column.differences > 0 ? (
+                                      <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-800 dark:bg-red-900/30 dark:text-red-300">
+                                        {column.differences} differences
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-full bg-green-100 px-2 py-1 text-xs text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                                        No differences
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               ))}
                             </ScrollArea>
                           </div>
-                        </>
-                      )}
-                    </motion.div>
+                          
+                          <div className="flex justify-end mt-4">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={exportComparisonReport}
+                            >
+                              <Download className="mr-1 h-4 w-4" />
+                              Export
+                            </Button>
+                          </div>
+                        </motion.div>
+                      </TabsContent>
+
+                      <TabsContent value="differences" className="mt-0">
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {comparisonResults.differences.length === 0 ? (
+                            <div className="flex h-64 flex-col items-center justify-center">
+                              <Check className="mb-4 h-12 w-12 text-green-500" />
+                              <p className="text-lg font-medium">No differences found</p>
+                              <p className="text-sm text-slate-500">
+                                All values in both datasets match
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="mb-4 flex items-center justify-between">
+                                <p className="text-sm text-slate-500">
+                                  Showing {comparisonResults.differences.length} differences
+                                </p>
+                                <div className="flex items-center">
+                                  <div className="relative mr-2">
+                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
+                                    <input
+                                      type="text"
+                                      placeholder="Search differences..."
+                                      className="h-9 rounded-md border border-input pl-8 pr-3 text-sm"
+                                    />
+                                  </div>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={exportComparisonReport}
+                                  >
+                                    <Download className="mr-1 h-4 w-4" />
+                                    Export
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                                <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
+                                  <div className="font-medium">Row Key</div>
+                                  <div className="font-medium">Column</div>
+                                  <div className="font-medium">Source Value</div>
+                                  <div className="font-medium">Target Value</div>
+                                </div>
+
+                                <ScrollArea className="h-[300px]">
+                                  {comparisonResults.differences.map((diff, index) => (
+                                    <div 
+                                      key={diff.id} 
+                                      className={`grid grid-cols-4 gap-4 p-3 ${
+                                        index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50"
+                                      }`}
+                                    >
+                                      <div className="font-medium">{diff.key}</div>
+                                      <div>{diff.column}</div>
+                                      <div className="text-red-600 dark:text-red-400">{diff.sourceValue}</div>
+                                      <div className="text-green-600 dark:text-green-400">{diff.targetValue}</div>
+                                    </div>
+                                  ))}
+                                </ScrollArea>
+                              </div>
+                            </>
+                          )}
+                        </motion.div>
+                      </TabsContent>
+
+                      <TabsContent value="missing" className="mt-0">
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          {comparisonResults.missing.length === 0 ? (
+                            <div className="flex h-64 flex-col items-center justify-center">
+                              <Check className="mb-4 h-12 w-12 text-green-500" />
+                              <p className="text-lg font-medium">No missing rows</p>
+                              <p className="text-sm text-slate-500">
+                                All rows are present in both datasets
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="mb-4 flex items-center justify-between">
+                                <p className="text-sm text-slate-500">
+                                  Found {comparisonResults.missing.length} missing rows
+                                </p>
+                                <div className="flex">
+                                  <Button variant="outline" size="sm" className="mr-2">
+                                    <Minus className="mr-1 h-4 w-4 text-red-500" />
+                                    Missing in Source: {comparisonResults.missing.filter(m => m.location === "source").length}
+                                  </Button>
+                                  <Button variant="outline" size="sm" className="mr-2">
+                                    <Plus className="mr-1 h-4 w-4 text-blue-500" />
+                                    Missing in Target: {comparisonResults.missing.filter(m => m.location === "target").length}
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={exportComparisonReport}
+                                  >
+                                    <Download className="mr-1 h-4 w-4" />
+                                    Export
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                                <div className="grid grid-cols-4 gap-4 bg-slate-50 p-3 dark:bg-slate-800">
+                                  <div className="font-medium">Row Key</div>
+                                  <div className="font-medium">Location</div>
+                                  <div className="col-span-2 font-medium">Row Data</div>
+                                </div>
+
+                                <ScrollArea className="h-[300px]">
+                                  {comparisonResults.missing.map((row, index) => (
+                                    <div 
+                                      key={row.id} 
+                                      className={`grid grid-cols-4 gap-4 p-3 ${
+                                        index % 2 === 0 ? "bg-white dark:bg-slate-900" : "bg-slate-50 dark:bg-slate-800/50"
+                                      }`}
+                                    >
+                                      <div className="font-medium">{row.key}</div>
+                                      <div>
+                                        {row.location === "source" ? (
+                                          <span className="flex items-center text-red-600 dark:text-red-400">
+                                            <Minus className="mr-1 h-4 w-4" /> Missing in Source
+                                          </span>
+                                        ) : (
+                                          <span className="flex items-center text-blue-600 dark:text-blue-400">
+                                            <Plus className="mr-1 h-4 w-4" /> Missing in Target
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="col-span-2">
+                                        <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-800">
+                                          {JSON.stringify(row.columns)}
+                                        </code>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </ScrollArea>
+                              </div>
+                            </>
+                          )}
+                        </motion.div>
+                      </TabsContent>
+                    </>
                   )}
-                </TabsContent>
-              )}
-            </CardContent>
+                </CardContent>
+              </Tabs>
+            </CardHeader>
           </Card>
         </div>
       </div>
