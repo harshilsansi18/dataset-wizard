@@ -1,5 +1,5 @@
 
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
 
@@ -131,6 +131,66 @@ export const uploadDataset = (file: File): Promise<DatasetType> => {
       resolve(newDataset);
     } catch (error) {
       console.error("Upload error:", error);
+      reject(error);
+    }
+  });
+};
+
+export const downloadDataset = (dataset: DatasetType): Promise<boolean> => {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!dataset.content) {
+        throw new Error("Dataset has no content to download");
+      }
+
+      let content: string;
+      let fileExtension: string;
+      let mimeType: string;
+
+      // Format the content based on dataset type
+      if (dataset.type === "CSV") {
+        content = Papa.unparse(dataset.content);
+        fileExtension = "csv";
+        mimeType = "text/csv";
+      } else if (dataset.type === "JSON") {
+        content = JSON.stringify(dataset.content, null, 2);
+        fileExtension = "json";
+        mimeType = "application/json";
+      } else if (dataset.type === "Database") {
+        // For database connections, export as JSON
+        content = JSON.stringify(dataset.content || [], null, 2);
+        fileExtension = "json";
+        mimeType = "application/json";
+      } else {
+        // Default to JSON if type is unknown
+        content = JSON.stringify(dataset.content, null, 2);
+        fileExtension = "json";
+        mimeType = "application/json";
+      }
+
+      // Create file name based on dataset name
+      const fileName = dataset.name.includes(`.${fileExtension}`) 
+        ? dataset.name 
+        : `${dataset.name}.${fileExtension}`;
+
+      // Create a blob with the content
+      const blob = new Blob([content], { type: mimeType });
+      
+      // Create a download link and trigger click
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      resolve(true);
+    } catch (error) {
+      console.error("Download error:", error);
       reject(error);
     }
   });

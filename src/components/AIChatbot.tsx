@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Bot, Send, User, X, Minimize, Maximize, Sparkles } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 type Message = {
   id: string;
@@ -70,6 +70,15 @@ const getAIResponse = async (message: string, messageHistory: Message[]): Promis
   // Anomaly detection
   else if (lowerMessage.includes('anomaly') || lowerMessage.includes('ml') || lowerMessage.includes('machine learning') || lowerMessage.includes('detect')) {
     return "Our anomaly detection uses machine learning to identify unusual patterns in your data that traditional rule-based validation might miss. The system learns normal patterns from historical data and flags deviations automatically. This is particularly powerful for time-series data, complex relationships between columns, and detecting subtle data drift. The ML models continuously improve as they process more data, adapting to seasonal patterns and legitimate changes in your data.";
+  }
+  
+  // Database connection questions
+  else if (lowerMessage.includes('database') || lowerMessage.includes('postgres') || lowerMessage.includes('mysql') || lowerMessage.includes('sql')) {
+    if (lowerMessage.includes('connect') || lowerMessage.includes('integration')) {
+      return "Our database connection feature allows you to link directly to PostgreSQL, MySQL, Oracle, SQL Server, and other databases. The connection is encrypted and secure, and supports both direct queries and metadata extraction. Once connected, you can validate data, run comparisons, and set up monitoring just like with uploaded datasets. For large databases, we use efficient sampling techniques to provide quick insights without performance impacts.";
+    }
+    
+    return "The platform supports various database systems including PostgreSQL, MySQL, Oracle, and SQL Server. You can connect using standard connection parameters (host, port, database name, username, password) with optional SSL encryption. Once connected, all schema objects become available for validation and comparison workflows. Our smart caching system minimizes database load while keeping quality metrics current.";
   }
   
   // Specific validation question handling
@@ -232,6 +241,13 @@ const AIChatbot = () => {
     if (lowerUserInput.includes('lineage') || lowerAiResponse.includes('lineage')) {
       newSuggestions.push("How detailed is the lineage tracking?");
       newSuggestions.push("How does lineage help with compliance?");
+    }
+    
+    // Add database specific suggestions
+    if (lowerUserInput.includes('database') || lowerUserInput.includes('postgres') || 
+        lowerAiResponse.includes('database') || lowerAiResponse.includes('postgres')) {
+      newSuggestions.push("How secure are database connections?");
+      newSuggestions.push("Can I validate data directly in the database?");
     }
     
     // Add some default suggestions if we couldn't generate contextual ones

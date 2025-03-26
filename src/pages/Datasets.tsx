@@ -19,12 +19,11 @@ import {
   FileSpreadsheet,
   Loader2,
   Trash2,
-  Edit,
   Download
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { toast } from "@/components/ui/use-toast";
-import { uploadDataset, getDatasets, deleteDataset, DatasetType } from "@/services/api";
+import { toast } from "@/hooks/use-toast";
+import { uploadDataset, getDatasets, deleteDataset, downloadDataset, DatasetType } from "@/services/api";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const Datasets = () => {
@@ -58,7 +57,7 @@ const Datasets = () => {
   const filteredDatasets = datasets.filter(dataset => 
     dataset.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     dataset.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    dataset.status.toLowerCase().includes(searchQuery.toLowerCase())
+    dataset.status?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,16 +92,40 @@ const Datasets = () => {
     e.preventDefault();
     setConnectingDb(true);
     
+    const formElement = e.target as HTMLFormElement;
+    const formData = new FormData(formElement);
+    const dbType = formData.get('db-type') as string;
+    const host = formData.get('host') as string;
+    const port = formData.get('port') as string;
+    const database = formData.get('database') as string;
+    const username = formData.get('username') as string;
+    const password = formData.get('password') as string;
+    
     setTimeout(() => {
       setConnectingDb(false);
+      
+      const newDbDataset = {
+        id: `db_${Date.now()}`,
+        name: `${dbType}://${host}:${port}/${database}`,
+        type: "Database" as const,
+        columnCount: 0,
+        rowCount: 0,
+        dateUploaded: new Date().toISOString().split('T')[0],
+        status: "Not Validated" as const,
+        size: "N/A",
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+      
+      setDatasets(prev => [...prev, newDbDataset]);
+      
       toast({
         title: "Database Connected",
-        description: "Successfully connected to the database.",
+        description: `Successfully connected to ${database} on ${host}.`,
       });
     }, 2000);
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status?: string) => {
     switch (status) {
       case "Validated":
         return <Check className="mr-2 h-4 w-4 text-green-500" />;
@@ -119,10 +142,11 @@ const Datasets = () => {
     switch (type) {
       case "CSV":
         return <FileText className="mr-2 h-4 w-4" />;
+      case "JSON":
+        return <FileText className="mr-2 h-4 w-4" />;
       case "Excel":
         return <FileSpreadsheet className="mr-2 h-4 w-4" />;
-      case "PostgreSQL":
-      case "MySQL":
+      case "Database":
         return <Database className="mr-2 h-4 w-4" />;
       default:
         return <FileText className="mr-2 h-4 w-4" />;
@@ -142,6 +166,23 @@ const Datasets = () => {
       toast({
         title: "Delete Failed",
         description: "There was an error deleting the dataset. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDownloadDataset = async (dataset: DatasetType) => {
+    try {
+      await downloadDataset(dataset);
+      toast({
+        title: "Download Started",
+        description: `${dataset.name} is being downloaded.`,
+      });
+    } catch (error) {
+      console.error("Error downloading dataset:", error);
+      toast({
+        title: "Download Failed",
+        description: "There was an error downloading the dataset. Please try again.",
         variant: "destructive"
       });
     }
@@ -188,7 +229,7 @@ const Datasets = () => {
                         type="file"
                         className="mt-4 cursor-pointer"
                         onChange={handleFileUpload}
-                        accept=".csv,.xlsx,.xls,.txt"
+                        accept=".csv,.xlsx,.xls,.txt,.json"
                         multiple
                         disabled={uploading}
                       />
@@ -225,6 +266,7 @@ const Datasets = () => {
                         <Label htmlFor="db-type">Database Type</Label>
                         <select
                           id="db-type"
+                          name="db-type"
                           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <option value="postgresql">PostgreSQL</option>
@@ -235,44 +277,44 @@ const Datasets = () => {
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="host">Host</Label>
-                        <Input id="host" placeholder="localhost or IP address" />
+                        <Input id="host" name="host" placeholder="localhost or IP address" />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
                           <Label htmlFor="port">Port</Label>
-                          <Input id="port" placeholder="5432" />
+                          <Input id="port" name="port" placeholder="5432" />
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="database">Database</Label>
-                          <Input id="database" placeholder="database name" />
+                          <Input id="database" name="database" placeholder="database name" />
                         </div>
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="username">Username</Label>
-                        <Input id="username" />
+                        <Input id="username" name="username" />
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="password">Password</Label>
-                        <Input id="password" type="password" />
+                        <Input id="password" name="password" type="password" />
                       </div>
+                    </div>
+                    <div className="mt-4">
+                      <Button className="w-full" type="submit" disabled={connectingDb}>
+                        {connectingDb ? (
+                          <>
+                            <ServerCrash className="mr-2 h-4 w-4 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          <>
+                            <Globe className="mr-2 h-4 w-4" />
+                            Connect
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </form>
                 </CardContent>
-                <CardFooter>
-                  <Button className="w-full" onClick={handleDbConnect} disabled={connectingDb}>
-                    {connectingDb ? (
-                      <>
-                        <ServerCrash className="mr-2 h-4 w-4 animate-spin" />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        <Globe className="mr-2 h-4 w-4" />
-                        Connect
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
               </Card>
             </TabsContent>
           </Tabs>
@@ -358,10 +400,10 @@ const Datasets = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="flex items-center cursor-pointer">
-                              <Edit className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="flex items-center cursor-pointer">
+                            <DropdownMenuItem 
+                              className="flex items-center cursor-pointer"
+                              onClick={() => handleDownloadDataset(dataset)}
+                            >
                               <Download className="mr-2 h-4 w-4" /> Download
                             </DropdownMenuItem>
                             <DropdownMenuItem 
