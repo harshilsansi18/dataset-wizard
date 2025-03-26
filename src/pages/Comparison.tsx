@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,7 +82,6 @@ const Comparison = () => {
       const result = await getComparisonResultById(comparisonId);
       if (result) {
         setComparisonResults(result);
-        // Find the history entry to set source and target dataset IDs
         const historyEntry = comparisonHistory.find(h => h.id === comparisonId);
         if (historyEntry) {
           setSourceDataset(historyEntry.sourceId);
@@ -142,10 +140,9 @@ const Comparison = () => {
           (document.getElementById('primary-key-only') as HTMLInputElement).checked,
       };
 
-      const results = await compareDatasets(sourceDataset, targetDataset, options);
+      const results = await compareDatasets(sourceDataset, targetDataset);
       setComparisonResults(results);
       
-      // Refresh comparison history
       fetchComparisonHistory();
       
       toast({
