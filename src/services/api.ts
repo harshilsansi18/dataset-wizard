@@ -3,6 +3,7 @@
 import { getDatasets, getDatasetById, uploadDataset, deleteDataset, downloadDataset, createDataset, updateDataset } from './datasetService';
 import { runValidation, getAllValidationResults } from './validationService';
 import { compareDatasetsByIds, getAllComparisonResults, getComparisonResultById, getComparisonHistory } from './comparisonService';
+import { connectToDatabase, getDatabaseTables, importTableAsDataset, disconnectDatabase, postgresConfig } from './databaseService';
 
 // Re-export all service functions to streamline imports
 export {
@@ -18,7 +19,13 @@ export {
   compareDatasetsByIds as compareDatasets,
   getAllComparisonResults, 
   getComparisonResultById,
-  getComparisonHistory
+  getComparisonHistory,
+  // Database related functions
+  connectToDatabase,
+  getDatabaseTables,
+  importTableAsDataset,
+  disconnectDatabase,
+  postgresConfig
 };
 
 // Re-export types
