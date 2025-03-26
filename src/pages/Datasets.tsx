@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,11 +17,15 @@ import {
   Globe, 
   ServerCrash, 
   FileSpreadsheet,
-  Loader2
+  Loader2,
+  Trash2,
+  Edit,
+  Download
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "@/components/ui/use-toast";
-import { uploadDataset, getDatasets, DatasetType } from "@/services/api";
+import { uploadDataset, getDatasets, deleteDataset, DatasetType } from "@/services/api";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const Datasets = () => {
   const [uploading, setUploading] = useState(false);
@@ -32,7 +35,6 @@ const Datasets = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch datasets when component mounts
     fetchDatasets();
   }, []);
 
@@ -68,7 +70,6 @@ const Datasets = () => {
         const uploadPromises = Array.from(files).map(file => uploadDataset(file));
         const uploadedDatasets = await Promise.all(uploadPromises);
         
-        // Refresh datasets list
         await fetchDatasets();
         
         toast({
@@ -92,7 +93,6 @@ const Datasets = () => {
     e.preventDefault();
     setConnectingDb(true);
     
-    // Simulate connection process
     setTimeout(() => {
       setConnectingDb(false);
       toast({
@@ -129,6 +129,24 @@ const Datasets = () => {
     }
   };
 
+  const handleDeleteDataset = async (datasetId: string, datasetName: string) => {
+    try {
+      await deleteDataset(datasetId);
+      toast({
+        title: "Dataset Deleted",
+        description: `${datasetName} has been successfully deleted.`,
+      });
+      fetchDatasets();
+    } catch (error) {
+      console.error("Error deleting dataset:", error);
+      toast({
+        title: "Delete Failed",
+        description: "There was an error deleting the dataset. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -139,7 +157,6 @@ const Datasets = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Left column - Dataset actions */}
         <div className="md:col-span-1">
           <Tabs defaultValue="upload" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
@@ -261,7 +278,6 @@ const Datasets = () => {
           </Tabs>
         </div>
 
-        {/* Right column - Datasets list */}
         <div className="md:col-span-2">
           <Card className="h-full">
             <CardHeader>
@@ -335,9 +351,27 @@ const Datasets = () => {
                             {dataset.status}
                           </span>
                         </div>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="flex items-center cursor-pointer">
+                              <Edit className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="flex items-center cursor-pointer">
+                              <Download className="mr-2 h-4 w-4" /> Download
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteDataset(dataset.id, dataset.name)} 
+                              className="flex items-center text-red-600 focus:text-red-600 cursor-pointer"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </motion.div>
                   ))
