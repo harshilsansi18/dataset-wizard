@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,7 @@ import {
   Calendar,
   History
 } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { 
   getDatasets, 
@@ -536,4 +537,254 @@ const Comparison = () => {
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2">
-                          <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-7
+                          <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                            <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Source</h3>
+                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingSource}</p>
+                          </div>
+                          <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                            <h3 className="mb-2 text-sm font-medium text-slate-500">Missing in Target</h3>
+                            <p className="text-2xl font-bold">{comparisonResults.summary.rowsMissingTarget}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={exportComparisonReport}
+                            className="flex items-center"
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Export Report
+                          </Button>
+                        </div>
+                      </motion.div>
+                    </TabsContent>
+
+                    <TabsContent value="columns">
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <div className="rounded-lg border">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                              <thead className="bg-slate-100 dark:bg-slate-800">
+                                <tr>
+                                  <th 
+                                    className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                    onClick={() => handleSort('name')}
+                                  >
+                                    <div className="flex items-center">
+                                      Column Name {getSortIcon('name')}
+                                    </div>
+                                  </th>
+                                  <th className="whitespace-nowrap px-4 py-3 font-medium">Data Type</th>
+                                  <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
+                                  <th 
+                                    className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                    onClick={() => handleSort('differences')}
+                                  >
+                                    <div className="flex items-center">
+                                      Differences {getSortIcon('differences')}
+                                    </div>
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {sortData(comparisonResults.columns, sortField || 'name').map((column) => (
+                                  <tr key={column.id} className="border-t">
+                                    <td className="px-4 py-3">{column.name}</td>
+                                    <td className="px-4 py-3">{column.type}</td>
+                                    <td className="px-4 py-3">
+                                      {column.matches ? (
+                                        <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-800/20 dark:text-green-300">
+                                          <Check className="mr-1 h-3 w-3" />
+                                          Matches
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-800/20 dark:text-red-300">
+                                          <X className="mr-1 h-3 w-3" />
+                                          Different
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3">{column.differences}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={exportComparisonReport}
+                            className="flex items-center"
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Export Report
+                          </Button>
+                        </div>
+                      </motion.div>
+                    </TabsContent>
+
+                    <TabsContent value="differences">
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {comparisonResults.differences.length === 0 ? (
+                          <div className="flex h-48 flex-col items-center justify-center text-center">
+                            <Check className="mb-2 h-8 w-8 text-green-500" />
+                            <h3 className="text-lg font-medium">No differences found</h3>
+                            <p className="text-sm text-slate-500">All data values match between the datasets</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="rounded-lg border">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-slate-100 dark:bg-slate-800">
+                                    <tr>
+                                      <th 
+                                        className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                        onClick={() => handleSort('key')}
+                                      >
+                                        <div className="flex items-center">
+                                          Row Key {getSortIcon('key')}
+                                        </div>
+                                      </th>
+                                      <th 
+                                        className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                        onClick={() => handleSort('column')}
+                                      >
+                                        <div className="flex items-center">
+                                          Column {getSortIcon('column')}
+                                        </div>
+                                      </th>
+                                      <th className="whitespace-nowrap px-4 py-3 font-medium">Source Value</th>
+                                      <th className="whitespace-nowrap px-4 py-3 font-medium">Target Value</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sortData(comparisonResults.differences, sortField || 'key').map((diff) => (
+                                      <tr key={diff.id} className="border-t">
+                                        <td className="px-4 py-3 font-medium">{diff.key}</td>
+                                        <td className="px-4 py-3">{diff.column}</td>
+                                        <td className="px-4 py-3">{diff.sourceValue}</td>
+                                        <td className="px-4 py-3">{diff.targetValue}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            <div className="mt-4 flex justify-end">
+                              <Button
+                                variant="outline"
+                                onClick={exportComparisonReport}
+                                className="flex items-center"
+                              >
+                                <Download className="mr-2 h-4 w-4" />
+                                Export Report
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </motion.div>
+                    </TabsContent>
+
+                    <TabsContent value="missing">
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {comparisonResults.missing.length === 0 ? (
+                          <div className="flex h-48 flex-col items-center justify-center text-center">
+                            <Check className="mb-2 h-8 w-8 text-green-500" />
+                            <h3 className="text-lg font-medium">No missing rows</h3>
+                            <p className="text-sm text-slate-500">All rows are present in both datasets</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="rounded-lg border">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-slate-100 dark:bg-slate-800">
+                                    <tr>
+                                      <th 
+                                        className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                        onClick={() => handleSort('key')}
+                                      >
+                                        <div className="flex items-center">
+                                          Row Key {getSortIcon('key')}
+                                        </div>
+                                      </th>
+                                      <th 
+                                        className="cursor-pointer whitespace-nowrap px-4 py-3 font-medium"
+                                        onClick={() => handleSort('location')}
+                                      >
+                                        <div className="flex items-center">
+                                          Missing From {getSortIcon('location')}
+                                        </div>
+                                      </th>
+                                      <th className="whitespace-nowrap px-4 py-3 font-medium">Data</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sortData(comparisonResults.missing, sortField || 'key').map((row) => (
+                                      <tr key={row.id} className="border-t">
+                                        <td className="px-4 py-3 font-medium">{row.key}</td>
+                                        <td className="px-4 py-3">
+                                          {row.location === 'source' ? (
+                                            <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-800/20 dark:text-red-300">
+                                              <Minus className="mr-1 h-3 w-3" />
+                                              Source
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-800/20 dark:text-blue-300">
+                                              <Minus className="mr-1 h-3 w-3" />
+                                              Target
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <pre className="max-w-xs overflow-x-auto whitespace-pre-wrap text-xs">
+                                            {JSON.stringify(row.columns, null, 2)}
+                                          </pre>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            <div className="mt-4 flex justify-end">
+                              <Button
+                                variant="outline"
+                                onClick={exportComparisonReport}
+                                className="flex items-center"
+                              >
+                                <Download className="mr-2 h-4 w-4" />
+                                Export Report
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </motion.div>
+                    </TabsContent>
+                  </>
+                )}
+              </CardContent>
+            </Tabs>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Comparison;
