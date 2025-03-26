@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -40,7 +39,6 @@ const Validation = () => {
   const [logs, setLogs] = useState<string[]>([]);
 
   useEffect(() => {
-    // Fetch datasets when component mounts
     fetchDatasets();
   }, []);
 
@@ -61,7 +59,6 @@ const Validation = () => {
     }
   };
 
-  // Simulates validation progress steps for better UX
   const simulateValidationProgress = () => {
     setProgress(0);
     setLogs([]);
@@ -75,7 +72,6 @@ const Validation = () => {
       { progress: 90, log: "Finalizing results..." },
     ];
     
-    // Add method-specific logs
     if (validationMethod === "advanced") {
       stageTimeline.splice(3, 0, 
         { progress: 40, log: "Checking for schema consistency..." }
@@ -119,18 +115,15 @@ const Validation = () => {
     setIsRunning(true);
     setValidationResults([]);
     
-    // Start progress simulation
     const progressInterval = simulateValidationProgress();
 
     try {
-      // Run validation through our API service with the selected method
       const results = await runValidation(
         selectedDataset, 
         validationMethod, 
         validationMethod === 'custom' ? customSQL : undefined
       );
       
-      // Ensure progress reaches 100% before showing results
       setProgress(100);
       clearInterval(progressInterval);
       
@@ -145,7 +138,6 @@ const Validation = () => {
         description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
       });
       
-      // Refresh datasets to get updated status
       fetchDatasets();
     } catch (error) {
       console.error("Validation error:", error);
@@ -187,7 +179,6 @@ const Validation = () => {
     }
   };
 
-  // Generate example Soda Core YAML configuration based on selected dataset and validation method
   const validationSnippet = `
 # Example Soda Core validation YAML
 profile: postgres
@@ -211,7 +202,6 @@ datasets:
             - row_count > 0` : ''}
 `;
 
-  // Find the validation timestamp for display
   const validationDate = validationResults.length > 0 
     ? new Date(validationResults[0].timestamp)
     : null;
@@ -226,7 +216,6 @@ datasets:
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
-        {/* Left column - Configuration */}
         <div className="md:col-span-1">
           <Card>
             <CardHeader>
@@ -357,7 +346,6 @@ datasets:
           </Card>
         </div>
 
-        {/* Right column - Results */}
         <div className="md:col-span-2">
           <Card className="h-full">
             <CardHeader>

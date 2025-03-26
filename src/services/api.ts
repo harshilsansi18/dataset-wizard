@@ -1,8 +1,8 @@
 
 // Import required services
 import { getDatasets, getDatasetById, uploadDataset, deleteDataset, downloadDataset, createDataset, updateDataset } from './datasetService';
-import { validateDataset, createValidation, getValidationResults } from './validationService';
-import { compareDatasets, getComparisonResults, saveComparisonResult, getComparisonHistory } from './comparisonService';
+import { runValidation, getAllValidationResults } from './validationService';
+import { compareDatasets, getAllComparisonResults, getComparisonResultById, getComparisonHistory } from './comparisonService';
 
 // Re-export all service functions to streamline imports
 export {
@@ -13,12 +13,11 @@ export {
   downloadDataset,
   createDataset,
   updateDataset,
-  validateDataset,
-  createValidation,
-  getValidationResults,
+  runValidation,
+  getAllValidationResults,
   compareDatasets,
-  getComparisonResults,
-  saveComparisonResult,
+  getAllComparisonResults, 
+  getComparisonResultById,
   getComparisonHistory
 };
 
