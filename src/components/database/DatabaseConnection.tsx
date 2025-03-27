@@ -1,13 +1,39 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Database, Server, Table, Download, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Database, Server, Table, Download, Loader2, Clock, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { connectToDatabase, getDatabaseTables, importTableAsDataset, disconnectDatabase, postgresConfig } from "@/services/api";
+import { 
+  connectToDatabase, 
+  getDatabaseTables, 
+  importTableAsDataset, 
+  disconnectDatabase, 
+  postgresConfig,
+  initDatabaseConnection
+} from "@/services/api";
+
+const formatTimeSince = (isoString: string | null): string => {
+  if (!isoString) return "unknown";
+  
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
+  
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+};
 
 const DatabaseConnection = () => {
   const [host, setHost] = useState("localhost");
@@ -19,6 +45,24 @@ const DatabaseConnection = () => {
   const [tables, setTables] = useState<string[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [isImporting, setIsImporting] = useState<string | null>(null);
+  const [lastConnected, setLastConnected] = useState<string | null>(null);
+
+  // Initialize connection from localStorage on component mount
+  useEffect(() => {
+    initDatabaseConnection();
+    
+    // Set form values if we have a connection
+    if (postgresConfig.isConnected) {
+      setHost(postgresConfig.host);
+      setPort(postgresConfig.port.toString());
+      setDatabase(postgresConfig.database);
+      setUser(postgresConfig.user);
+      setLastConnected(postgresConfig.lastConnected);
+      
+      // Load tables if we're connected
+      handleGetTables();
+    }
+  }, []);
 
   const handleConnect = async () => {
     if (!host || !database || !user || !password) {
@@ -39,6 +83,8 @@ const DatabaseConnection = () => {
         user,
         password
       });
+      
+      setLastConnected(postgresConfig.lastConnected);
       
       // After successful connection, load tables
       handleGetTables();
@@ -94,6 +140,7 @@ const DatabaseConnection = () => {
   const handleDisconnect = () => {
     disconnectDatabase();
     setTables([]);
+    setLastConnected(null);
   };
 
   return (
@@ -181,12 +228,21 @@ const DatabaseConnection = () => {
         ) : (
           <div className="space-y-4">
             <div className="rounded-md bg-blue-50 p-4 dark:bg-blue-900/20">
-              <div className="flex items-center">
-                <Database className="mr-2 h-5 w-5 text-blue-500" />
-                <div>
-                  <p className="font-medium">Connected to database</p>
-                  <p className="text-sm text-slate-500">{postgresConfig.connectionUrl}</p>
+              <div className="flex justify-between items-start">
+                <div className="flex items-start">
+                  <Database className="mr-2 h-5 w-5 text-blue-500 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Connected to database</p>
+                    <p className="text-sm text-slate-500">{postgresConfig.connectionUrl}</p>
+                    {lastConnected && (
+                      <div className="flex items-center mt-1 text-xs text-slate-400">
+                        <Clock className="h-3 w-3 mr-1" />
+                        Connected {formatTimeSince(lastConnected)}
+                      </div>
+                    )}
+                  </div>
                 </div>
+                <Badge variant="outline" className="ml-2">PostgreSQL</Badge>
               </div>
             </div>
 
@@ -205,7 +261,7 @@ const DatabaseConnection = () => {
                     {isLoadingTables ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Table className="h-4 w-4" />
+                      <RefreshCw className="h-4 w-4" />
                     )}
                     <span className="ml-2">Refresh Tables</span>
                   </Button>

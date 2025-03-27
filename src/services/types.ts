@@ -11,6 +11,13 @@ export type DatasetType = {
   lastUpdated?: string;
   content?: any[]; // Store actual file content
   headers?: string[]; // Store column headers
+  source?: {
+    type: "file" | "database" | "api";
+    connectionName?: string;
+    tableName?: string;
+    fileName?: string;
+    apiEndpoint?: string;
+  };
 };
 
 export type ValidationResult = {

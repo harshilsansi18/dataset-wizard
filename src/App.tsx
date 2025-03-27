@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme/theme-provider";
+import { useEffect } from "react";
 
 import Navbar from "@/components/navigation/Navbar";
 import AIChatbot from "@/components/AIChatbot";
@@ -15,12 +16,18 @@ import Validation from "./pages/Validation";
 import Comparison from "./pages/Comparison";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import { initDatabaseConnection } from "./services/api";
 
 // Create a new queryClient with default settings
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+const AppContent = () => {
+  // Initialize database connection from localStorage if available
+  useEffect(() => {
+    initDatabaseConnection();
+  }, []);
+
+  return (
     <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
       <TooltipProvider>
         <Toaster />
@@ -44,6 +51,12 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <AppContent />
   </QueryClientProvider>
 );
 

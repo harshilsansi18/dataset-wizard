@@ -2,6 +2,7 @@
 import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
+import { getImportedDatasets } from "./databaseService";
 
 // Persistent storage using localStorage
 const DATASETS_STORAGE_KEY = "soda_core_datasets";
@@ -38,7 +39,16 @@ const saveToStorage = (data: any) => {
 export const getDatasets = (): Promise<DatasetType[]> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(Object.values(datasetsStore));
+      // Combine file-based datasets with database-imported datasets
+      const dbDatasets = getImportedDatasets();
+      const allDatasets = [...Object.values(datasetsStore), ...dbDatasets];
+      
+      // Remove duplicates by ID
+      const uniqueDatasets = allDatasets.filter((dataset, index, self) => 
+        index === self.findIndex((d) => d.id === dataset.id)
+      );
+      
+      resolve(uniqueDatasets);
     }, 500);
   });
 };
@@ -46,7 +56,17 @@ export const getDatasets = (): Promise<DatasetType[]> => {
 export const getDatasetById = (id: string): Promise<DatasetType | undefined> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve(datasetsStore[id]);
+      // Check in file-based datasets
+      if (datasetsStore[id]) {
+        resolve(datasetsStore[id]);
+        return;
+      }
+      
+      // Check in database-imported datasets
+      const dbDatasets = getImportedDatasets();
+      const dbDataset = dbDatasets.find(ds => ds.id === id);
+      
+      resolve(dbDataset);
     }, 300);
   });
 };
@@ -107,7 +127,7 @@ export const uploadDataset = (file: File): Promise<DatasetType> => {
       const fileSize = formatFileSize(file.size);
       const fileType = determineFileType(file.name);
       
-      // Actually process the file content instead of using random values
+      // Process the file content
       const { content, headers, rowCount, columnCount } = await processFileContent(file);
       
       const newDataset: DatasetType = {
@@ -121,7 +141,11 @@ export const uploadDataset = (file: File): Promise<DatasetType> => {
         size: fileSize,
         lastUpdated: new Date().toISOString().split('T')[0],
         content,
-        headers
+        headers,
+        source: {
+          type: "file",
+          fileName: file.name
+        }
       };
       
       // Save to store and persist
