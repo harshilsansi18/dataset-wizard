@@ -1,4 +1,3 @@
-
 import * as React from "react"
 
 // We're defining our own types here instead of importing from toast.tsx
@@ -185,4 +184,4 @@ function useToast() {
 }
 
 export { useToast, toast }
-export type { ToastActionElement, ToastProps }
+export type { ToastActionElement }
