@@ -1,12 +1,16 @@
+
 import * as React from "react"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+// We're defining our own types here instead of importing from toast.tsx
+// to avoid circular dependencies
+type ToastActionElement = React.ReactElement
 
-const TOAST_LIMIT = 20
-const TOAST_REMOVE_DELAY = 1000000
+export interface ToastProps {
+  variant?: "default" | "destructive"
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  className?: string
+}
 
 type ToasterToast = ToastProps & {
   id: string
@@ -14,6 +18,9 @@ type ToasterToast = ToastProps & {
   description?: React.ReactNode
   action?: ToastActionElement
 }
+
+const TOAST_LIMIT = 20
+const TOAST_REMOVE_DELAY = 1000000
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -178,3 +185,4 @@ function useToast() {
 }
 
 export { useToast, toast }
+export type { ToastActionElement, ToastProps }
