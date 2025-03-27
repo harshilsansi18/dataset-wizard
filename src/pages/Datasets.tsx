@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { 
   UploadCloud, 
@@ -72,7 +73,13 @@ const Datasets = () => {
 
   const handleDownload = async (id: string, name: string) => {
     try {
-      await downloadDataset(id);
+      // Find the dataset object by id first
+      const dataset = datasets.find(d => d.id === id);
+      if (!dataset) {
+        throw new Error("Dataset not found");
+      }
+      
+      await downloadDataset(dataset);
       toast({
         title: "Download Started",
         description: `${name} is being downloaded`
