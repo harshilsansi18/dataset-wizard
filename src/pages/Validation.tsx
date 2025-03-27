@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
-import { getDatasets, runValidation, DatasetType, ValidationResult } from "@/services/api";
+import { getDatasets, runValidation, DatasetType, ValidationResult, getImportedDatasets } from "@/services/api";
 
 const Validation = () => {
   const navigate = useNavigate();
@@ -45,7 +46,9 @@ const Validation = () => {
   const fetchDatasets = async () => {
     setLoading(true);
     try {
+      // Get datasets from all sources
       const data = await getDatasets();
+      console.log("Validation page loaded datasets:", data.length);
       setDatasets(data);
     } catch (error) {
       console.error("Error fetching datasets:", error);

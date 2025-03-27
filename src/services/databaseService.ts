@@ -26,11 +26,11 @@ export const connectToDatabase = async (
     password: string;
   }
 ): Promise<boolean> => {
-  // In a real implementation, this would connect to a backend service
-  // For now, we'll simulate a successful connection
-  
-  return new Promise((resolve) => {
-    setTimeout(() => {
+  return new Promise((resolve, reject) => {
+    try {
+      // In a real implementation, this would connect to PostgreSQL
+      console.log("Connecting to database:", connectionParams.host, connectionParams.database);
+      
       // Store connection details
       postgresConfig.isConnected = true;
       postgresConfig.host = connectionParams.host;
@@ -41,19 +41,15 @@ export const connectToDatabase = async (
       postgresConfig.lastConnected = new Date().toISOString();
       
       // Store connection in localStorage to persist between sessions
-      try {
-        localStorage.setItem('postgres_connection', JSON.stringify({
-          isConnected: true,
-          host: connectionParams.host,
-          port: connectionParams.port,
-          database: connectionParams.database,
-          user: connectionParams.user,
-          connectionUrl: postgresConfig.connectionUrl,
-          lastConnected: postgresConfig.lastConnected
-        }));
-      } catch (err) {
-        console.error('Failed to save connection to localStorage:', err);
-      }
+      localStorage.setItem('postgres_connection', JSON.stringify({
+        isConnected: true,
+        host: connectionParams.host,
+        port: connectionParams.port,
+        database: connectionParams.database,
+        user: connectionParams.user,
+        connectionUrl: postgresConfig.connectionUrl,
+        lastConnected: postgresConfig.lastConnected
+      }));
       
       toast({
         title: "Database Connected",
@@ -61,7 +57,10 @@ export const connectToDatabase = async (
       });
       
       resolve(true);
-    }, 1000);
+    } catch (err) {
+      console.error('Failed to connect to database:', err);
+      reject(new Error('Failed to connect to database'));
+    }
   });
 };
 
@@ -79,16 +78,10 @@ export const initDatabaseConnection = (): void => {
       postgresConfig.connectionUrl = connectionData.connectionUrl;
       postgresConfig.lastConnected = connectionData.lastConnected;
       
-      // If connection is more than 24 hours old, consider it expired
-      if (postgresConfig.lastConnected) {
-        const lastConnected = new Date(postgresConfig.lastConnected);
-        const now = new Date();
-        const hoursSinceConnection = (now.getTime() - lastConnected.getTime()) / (1000 * 60 * 60);
-        
-        if (hoursSinceConnection > 24) {
-          disconnectDatabase();
-          return;
-        }
+      // Also load imported datasets
+      const savedDatasets = localStorage.getItem('db_imported_datasets');
+      if (savedDatasets) {
+        postgresConfig.importedDatasets = JSON.parse(savedDatasets);
       }
       
       console.log('Restored database connection from localStorage');
@@ -176,9 +169,7 @@ export const importTableAsDataset = async (tableName: string): Promise<DatasetTy
       
       // Save to localStorage for persistence between page loads
       try {
-        const existingDatasets = JSON.parse(localStorage.getItem('db_imported_datasets') || '[]');
-        existingDatasets.push(dataset);
-        localStorage.setItem('db_imported_datasets', JSON.stringify(existingDatasets));
+        localStorage.setItem('db_imported_datasets', JSON.stringify(postgresConfig.importedDatasets));
       } catch (err) {
         console.error('Failed to save imported dataset to localStorage:', err);
       }

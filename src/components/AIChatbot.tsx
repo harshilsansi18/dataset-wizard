@@ -26,7 +26,9 @@ const getDataValidationResponse = async (
   messageHistory: Message[],
   availableDatasets?: DatasetType[]
 ): Promise<string> => {
-  await new Promise(resolve => setTimeout(resolve, 800));
+  if (!availableDatasets || availableDatasets.length === 0) {
+    return "I don't see any datasets available. Please upload a dataset first or connect to your database to import tables.";
+  }
   
   const lowerMessage = message.toLowerCase();
   
@@ -47,11 +49,9 @@ const getDataValidationResponse = async (
   }
   
   if (isValidationQuery) {
-    if (availableDatasets && availableDatasets.length > 0) {
-      return `I can help validate your datasets. I see you have ${availableDatasets.length} dataset(s) available. Would you like me to analyze a specific one? For example, I could check "${availableDatasets[0].name}" for quality issues.`;
-    }
-    
-    return "I can help you validate your datasets for quality issues like missing values, type inconsistencies, outliers, and more. Just upload a dataset or specify which dataset you'd like me to analyze.";
+    // We have datasets but user didn't specify which one
+    // Select the first one for demonstration
+    return generateDatasetAnalysis(availableDatasets[0]);
   }
   
   if (lowerMessage.includes('list') && (lowerMessage.includes('dataset') || lowerMessage.includes('data'))) {
@@ -83,7 +83,8 @@ const getDataValidationResponse = async (
     return "Here are data quality best practices:\n\n1. **Validate at collection**: Prevent errors early with input validation\n2. **Document assumptions**: Create a data dictionary with expected formats and constraints\n3. **Profile regularly**: Continuously monitor data quality metrics\n4. **Create tests**: Develop automated quality checks for important datasets\n5. **Standardize cleanup**: Establish consistent procedures for handling common issues\n\nConsistent validation will save time and increase confidence in your analysis results.";
   }
   
-  return "I'm your data validation assistant. I can help you:\n\n- Analyze datasets for quality issues\n- Identify missing values, type inconsistencies, and outliers\n- Suggest data cleaning strategies\n- Validate against business rules\n- Provide data quality recommendations\n\nHow can I assist with your data quality needs today?";
+  // Default response if nothing else matched
+  return "I can analyze your datasets for quality issues. Just let me know which dataset you'd like me to check, or I can analyze the first available one.";
 };
 
 const generateDatasetAnalysis = (dataset: DatasetType): string => {
@@ -95,6 +96,10 @@ const generateDatasetAnalysis = (dataset: DatasetType): string => {
   const summary: string[] = [];
   let totalNullCount = 0;
   let columnsWithIssues = 0;
+  
+  summary.push(`## Analysis for "${dataset.name}"`);
+  summary.push(`**Type**: ${dataset.type}`);
+  summary.push(`**Size**: ${dataset.rowCount} rows, ${dataset.columnCount} columns`);
   
   dataset.headers.forEach(column => {
     const nullCount = dataset.content!.filter(row => !row[column] && row[column] !== 0 && row[column] !== false).length;
@@ -153,16 +158,16 @@ const generateDatasetAnalysis = (dataset: DatasetType): string => {
   
   if (dataQuality > 0.3) {
     qualityRating = "Poor";
-    summary.push(`I've analyzed "${dataset.name}" and found significant quality issues that need attention.`);
+    summary.push(`I've found significant quality issues that need attention.`);
   } else if (dataQuality > 0.1) {
     qualityRating = "Fair";
-    summary.push(`I've analyzed "${dataset.name}" and found some quality issues that should be addressed.`);
+    summary.push(`I've found some quality issues that should be addressed.`);
   } else if (columnsWithIssues > 0) {
     qualityRating = "Good";
-    summary.push(`I've analyzed "${dataset.name}" and found minor quality issues that could be improved.`);
+    summary.push(`I've found minor quality issues that could be improved.`);
   } else {
     qualityRating = "Excellent";
-    summary.push(`I've analyzed "${dataset.name}" and it appears to have excellent data quality with no obvious issues.`);
+    summary.push(`This dataset appears to have excellent data quality with no obvious issues.`);
   }
   
   summary.push(`**Data Quality Rating**: ${qualityRating}`);
@@ -249,6 +254,7 @@ const AIChatbot = () => {
     setLoadingDatasets(true);
     try {
       const datasets = await getDatasets();
+      console.log("Chatbot loaded datasets:", datasets.length);
       setAvailableDatasets(datasets);
     } catch (error) {
       console.error('Error fetching datasets:', error);
@@ -287,6 +293,7 @@ const AIChatbot = () => {
     setIsSuggesting(false);
     
     try {
+      // Force reload datasets before analysis
       await fetchDatasets();
       
       const response = await getDataValidationResponse(inputValue, messages, availableDatasets);

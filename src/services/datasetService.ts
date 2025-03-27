@@ -1,4 +1,3 @@
-
 import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
@@ -38,18 +37,19 @@ const saveToStorage = (data: any) => {
 // API functions
 export const getDatasets = (): Promise<DatasetType[]> => {
   return new Promise((resolve) => {
-    setTimeout(() => {
-      // Combine file-based datasets with database-imported datasets
-      const dbDatasets = getImportedDatasets();
-      const allDatasets = [...Object.values(datasetsStore), ...dbDatasets];
-      
-      // Remove duplicates by ID
-      const uniqueDatasets = allDatasets.filter((dataset, index, self) => 
-        index === self.findIndex((d) => d.id === dataset.id)
-      );
-      
-      resolve(uniqueDatasets);
-    }, 500);
+    // Combine file-based datasets with database-imported datasets
+    const dbDatasets = getImportedDatasets();
+    console.log("File datasets:", Object.values(datasetsStore).length);
+    console.log("Database datasets:", dbDatasets.length);
+    
+    const allDatasets = [...Object.values(datasetsStore), ...dbDatasets];
+    
+    // Remove duplicates by ID
+    const uniqueDatasets = allDatasets.filter((dataset, index, self) => 
+      index === self.findIndex((d) => d.id === dataset.id)
+    );
+    
+    resolve(uniqueDatasets);
   });
 };
 
