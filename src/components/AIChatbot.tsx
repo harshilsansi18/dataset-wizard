@@ -1,11 +1,11 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, X, Minimize, Maximize, Sparkles } from 'lucide-react';
+import { Bot, Send, User, X, Minimize, Maximize, Sparkles, Database, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { getDatasets, getDatasetById, DatasetType } from '@/services/api';
 
 type Message = {
   id: string;
@@ -14,14 +14,60 @@ type Message = {
   timestamp: Date;
 };
 
-// Enhanced AI responses for the data quality chatbot
-const getAIResponse = async (message: string, messageHistory: Message[]): Promise<string> => {
-  // Simulate AI processing time
+type ValidationSuggestion = {
+  column: string;
+  issue: string;
+  suggestion: string;
+  severity: 'high' | 'medium' | 'low';
+};
+
+const getDataValidationResponse = async (
+  message: string, 
+  messageHistory: Message[],
+  availableDatasets?: DatasetType[]
+): Promise<string> => {
   await new Promise(resolve => setTimeout(resolve, 800));
   
   const lowerMessage = message.toLowerCase();
   
-  // Check context from previous messages for more relevant responses
+  const isValidationQuery = lowerMessage.includes('valid') || 
+                            lowerMessage.includes('check') || 
+                            lowerMessage.includes('quality') || 
+                            lowerMessage.includes('issue') || 
+                            lowerMessage.includes('error') || 
+                            lowerMessage.includes('problem') ||
+                            lowerMessage.includes('analyze');
+  
+  const datasetMentioned = availableDatasets?.find(ds => 
+    lowerMessage.includes(ds.name.toLowerCase())
+  );
+  
+  if (isValidationQuery && datasetMentioned) {
+    return generateDatasetAnalysis(datasetMentioned);
+  }
+  
+  if (isValidationQuery) {
+    if (availableDatasets && availableDatasets.length > 0) {
+      return `I can help validate your datasets. I see you have ${availableDatasets.length} dataset(s) available. Would you like me to analyze a specific one? For example, I could check "${availableDatasets[0].name}" for quality issues.`;
+    }
+    
+    return "I can help you validate your datasets for quality issues like missing values, type inconsistencies, outliers, and more. Just upload a dataset or specify which dataset you'd like me to analyze.";
+  }
+  
+  if (lowerMessage.includes('list') && (lowerMessage.includes('dataset') || lowerMessage.includes('data'))) {
+    if (availableDatasets && availableDatasets.length > 0) {
+      return `Here are your available datasets:\n\n${availableDatasets.map((ds, index) => 
+        `${index + 1}. ${ds.name} (${ds.type}) - ${ds.rowCount} rows, ${ds.columnCount} columns, Status: ${ds.status || 'Not Validated'}`
+      ).join('\n')}`;
+    } else {
+      return "You don't have any datasets available yet. You can upload one from the Datasets page.";
+    }
+  }
+  
+  if (lowerMessage.includes('fix') || lowerMessage.includes('repair') || lowerMessage.includes('clean')) {
+    return "To fix data quality issues, I recommend:\n\n1. **Missing values**: Consider imputation techniques appropriate for your data type (mean/median for numeric, mode for categorical).\n\n2. **Type inconsistencies**: Transform values to maintain consistency, e.g., standardize date formats or number representations.\n\n3. **Outliers**: Decide whether to remove, cap, or transform outliers based on your analysis needs.\n\n4. **Duplicates**: Remove duplicate records or make them unique by adding identifiers.\n\nWould you like specific guidance on a particular dataset?";
+  }
+  
   const hasContextAbout = (topic: string): boolean => {
     return messageHistory.some(msg => 
       msg.sender === 'user' && 
@@ -29,114 +75,150 @@ const getAIResponse = async (message: string, messageHistory: Message[]): Promis
     );
   };
 
-  // Enhanced data profiling responses
-  if (lowerMessage.includes('profil') || lowerMessage.includes('statistics') || lowerMessage.includes('stats')) {
-    if (hasContextAbout('column') || lowerMessage.includes('column')) {
-      return "Our column-level profiling provides detailed statistics including min/max values, quantiles, unique values count, most common values, and pattern detection. This helps identify outliers, inconsistencies, and potential quality issues at the column level. Would you like to see a sample profile for a specific column type?";
-    }
-    
-    return "Data profiling provides comprehensive statistical summaries of your dataset including: value distributions, patterns, anomalies, completeness metrics, and data type inference. Our profiling engine can handle large datasets efficiently and produces interactive dashboards with drill-down capabilities. The profiles help identify quality issues like outliers, format inconsistencies, and data gaps before they impact analysis.";
-  } 
-  
-  // Data lineage tracking
-  else if (lowerMessage.includes('lineage') || lowerMessage.includes('tracking') || lowerMessage.includes('history')) {
-    return "Our data lineage tracking visualizes how data flows through your systems from source to destination. It captures transformations, dependencies, and quality checks at each stage. This helps with regulatory compliance (GDPR, CCPA), impact analysis when schemas change, and pinpointing where quality issues originate. The interactive lineage graph makes it easy to follow your data journey with full audit capabilities.";
-  } 
-  
-  // Custom validation rules
-  else if ((lowerMessage.includes('custom') || lowerMessage.includes('create') || lowerMessage.includes('build')) && 
-           (lowerMessage.includes('rule') || lowerMessage.includes('validation') || lowerMessage.includes('check'))) {
-    if (lowerMessage.includes('complex') || lowerMessage.includes('advanced')) {
-      return "For complex validation rules, you can combine multiple conditions using AND/OR logic, reference other columns, and use functions like REGEX_MATCH, IS_DATE, IS_NUMBER. Example: WHEN column_A > 100 AND column_B MATCHES '[A-Z]{2}\\d{4}' THEN FAIL WITH 'Invalid format detected'. You can also schedule these rules to run automatically and send alerts when they fail.";
-    }
-    return "Our rule builder lets you create powerful validation checks without writing code. You can define thresholds for completeness, uniqueness, referential integrity, and value patterns. Rules can be categorized by severity (Critical, Warning, Info) and organized into reusable test suites. The visual rule builder shows sample data as you build, making it easy to test rules on real data.";
-  } 
-  
-  // Scheduled validation
-  else if (lowerMessage.includes('schedule') || lowerMessage.includes('automate') || lowerMessage.includes('automatic')) {
-    return "Scheduled validation jobs automate regular data quality checks based on your defined intervals (hourly, daily, weekly). You can configure different validation suites for different datasets and receive alerts via email, Slack, or other notification channels when issues are detected. The scheduling system supports dependencies between jobs and provides detailed execution logs and performance metrics.";
-  } 
-  
-  // Export capabilities
-  else if (lowerMessage.includes('export') || lowerMessage.includes('pdf') || lowerMessage.includes('excel') || lowerMessage.includes('report')) {
-    return "Our export capabilities include customizable reports in multiple formats: PDF for executive summaries, Excel for detailed analysis, and CSV for raw data. Reports can include trend charts showing quality metrics over time, detailed validation results, and recommendations for improvement. You can also schedule automated reports to be delivered to stakeholders regularly with custom branding options.";
-  } 
-  
-  // Data catalog integration
-  else if (lowerMessage.includes('catalog') || lowerMessage.includes('integration') || lowerMessage.includes('connect')) {
-    return "We integrate seamlessly with popular data catalogs like Collibra, Alation, Atlan, and Datahub. This integration enriches your catalog with quality metrics, validation status, and lineage information. The bidirectional synchronization ensures your data governance tools always have the latest quality insights, making quality scores discoverable across your organization. Would you like more information on a specific catalog integration?";
-  } 
-  
-  // Anomaly detection
-  else if (lowerMessage.includes('anomaly') || lowerMessage.includes('ml') || lowerMessage.includes('machine learning') || lowerMessage.includes('detect')) {
-    return "Our anomaly detection uses machine learning to identify unusual patterns in your data that traditional rule-based validation might miss. The system learns normal patterns from historical data and flags deviations automatically. This is particularly powerful for time-series data, complex relationships between columns, and detecting subtle data drift. The ML models continuously improve as they process more data, adapting to seasonal patterns and legitimate changes in your data.";
+  if (lowerMessage.includes('rule') || lowerMessage.includes('check') || lowerMessage.includes('criteria')) {
+    return "I can help you create data validation rules including:\n\n- **Completeness checks**: Ensure required fields are populated\n- **Format validation**: Verify dates, emails, phone numbers follow correct patterns\n- **Range checks**: Confirm numeric values are within acceptable ranges\n- **Cross-field validation**: Ensure logical relationships between fields\n- **Uniqueness checks**: Identify duplicate records\n\nI can implement these rules as part of the validation process. Which type of validation rule interests you?";
   }
   
-  // Database connection questions
-  else if (lowerMessage.includes('database') || lowerMessage.includes('postgres') || lowerMessage.includes('mysql') || lowerMessage.includes('sql')) {
-    if (lowerMessage.includes('connect') || lowerMessage.includes('integration')) {
-      return "Our database connection feature allows you to link directly to PostgreSQL, MySQL, Oracle, SQL Server, and other databases. The connection is encrypted and secure, and supports both direct queries and metadata extraction. Once connected, you can validate data, run comparisons, and set up monitoring just like with uploaded datasets. For large databases, we use efficient sampling techniques to provide quick insights without performance impacts.";
-    }
-    
-    return "The platform supports various database systems including PostgreSQL, MySQL, Oracle, and SQL Server. You can connect using standard connection parameters (host, port, database name, username, password) with optional SSL encryption. Once connected, all schema objects become available for validation and comparison workflows. Our smart caching system minimizes database load while keeping quality metrics current.";
+  if (lowerMessage.includes('best practice') || lowerMessage.includes('recommend') || lowerMessage.includes('advice')) {
+    return "Here are data quality best practices:\n\n1. **Validate at collection**: Prevent errors early with input validation\n2. **Document assumptions**: Create a data dictionary with expected formats and constraints\n3. **Profile regularly**: Continuously monitor data quality metrics\n4. **Create tests**: Develop automated quality checks for important datasets\n5. **Standardize cleanup**: Establish consistent procedures for handling common issues\n\nConsistent validation will save time and increase confidence in your analysis results.";
   }
   
-  // Specific validation question handling
-  else if (lowerMessage.includes('validation') || lowerMessage.includes('check') || lowerMessage.includes('quality')) {
-    if (lowerMessage.includes('best') || lowerMessage.includes('practice')) {
-      return "Best practices for data validation include: 1) Start with column-level checks for completeness, type consistency, and range validation, 2) Add row-level checks that validate relationships between columns, 3) Implement cross-dataset validation for referential integrity, 4) Establish quality thresholds appropriate to your domain, and 5) Automate validation to catch issues early. Would you like specific examples for your data type?";
-    }
-    
-    if (lowerMessage.includes('fail') || lowerMessage.includes('error') || lowerMessage.includes('issue')) {
-      return "Common validation failures include: inconsistent data types, null values in required fields, duplicate primary keys, reference violations, pattern mismatches, and outliers outside acceptable ranges. Our platform helps you identify root causes through detailed error messages, sample data that failed checks, and trend analysis to determine if issues are isolated or systematic. I can help create specific validation rules to catch these issues if you describe your dataset.";
-    }
-    
-    return "Our validation engine supports three tiers of checks: 1) Basic checks for row counts, null values, and data types, 2) Advanced checks for referential integrity, business rules, and schema validation, and 3) Custom SQL checks for complex validations. Each validation produces detailed results showing pass/fail status, affected rows, and recommended actions. Would you like help setting up a specific type of validation?";
-  } 
-  
-  // Comparison feature explanation
-  else if (lowerMessage.includes('comparison') || lowerMessage.includes('compare') || lowerMessage.includes('diff')) {
-    if (lowerMessage.includes('column') || lowerMessage.includes('schema')) {
-      return "Our column comparison analyzes schema differences between datasets including: added/removed columns, data type changes, and statistical distribution shifts. The system highlights potential compatibility issues when column properties change and provides detailed metrics on how value distributions differ between datasets, even when the schema remains the same.";
-    }
-    
-    return "Dataset comparison identifies differences between two datasets at multiple levels: schema changes, value differences, missing records, and statistical variations. The comparison engine efficiently handles large datasets through optimized algorithms and provides interactive visualizations of the differences. This is particularly useful for verifying ETL processes, comparing production vs. test data, and validating data migrations.";
+  return "I'm your data validation assistant. I can help you:\n\n- Analyze datasets for quality issues\n- Identify missing values, type inconsistencies, and outliers\n- Suggest data cleaning strategies\n- Validate against business rules\n- Provide data quality recommendations\n\nHow can I assist with your data quality needs today?";
+};
+
+const generateDatasetAnalysis = (dataset: DatasetType): string => {
+  if (!dataset.content || !dataset.headers) {
+    return `I'd like to analyze "${dataset.name}" but I can't access its content. Please ensure the dataset is properly loaded.`;
   }
   
-  // Debugging and troubleshooting help
-  else if (lowerMessage.includes('debug') || lowerMessage.includes('troubleshoot') || lowerMessage.includes('help me fix')) {
-    return "To troubleshoot data quality issues, I recommend: 1) Review the validation logs for specific error messages, 2) Examine sample records that failed validation, 3) Check for patterns in the failing data, 4) Verify if recent changes coincide with the issues, and 5) Run targeted validations to isolate the problem. I can help interpret error messages or suggest specific checks if you share more details about the issue you're experiencing.";
-  }
+  const suggestions: ValidationSuggestion[] = [];
+  const summary: string[] = [];
+  let totalNullCount = 0;
+  let columnsWithIssues = 0;
   
-  // Basic greeting response
-  else if (lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('hey')) {
-    return "Hello! I'm your advanced data quality assistant. I can help with validation, comparison, profiling, lineage tracking, custom rule creation, anomaly detection, and more. How can I assist with your data quality needs today?";
-  } 
-  
-  // General affirmation
-  else if (lowerMessage.includes('yes') || lowerMessage.includes('sure') || lowerMessage.includes('please')) {
-    return "Great! To help you more effectively, could you tell me more about your specific data quality needs? For example, are you looking to validate a specific dataset, compare datasets, set up automated checks, or something else? The more details you provide, the better I can tailor my assistance.";
-  } 
-  
-  // General data quality assistant response
-  else {
-    // Provide a varied response to avoid repetition
-    const responses = [
-      "I'm your data quality assistant with expertise in validation, profiling, lineage tracking, anomaly detection, and more. What specific data quality challenges are you facing today?",
-      "As your data quality guide, I can help with everything from basic validations to machine learning-powered anomaly detection. What aspect of data quality would you like to explore?",
-      "I'm here to help improve your data quality through validation, comparison, profiling, and advanced analytics. Could you share more details about your specific needs?",
-      "I can assist with data validation strategies, quality monitoring, and implementing best practices for maintaining high-quality data. What would you like to know more about?"
-    ];
+  dataset.headers.forEach(column => {
+    const nullCount = dataset.content!.filter(row => !row[column] && row[column] !== 0 && row[column] !== false).length;
+    if (nullCount > 0) {
+      totalNullCount += nullCount;
+      columnsWithIssues++;
+      
+      const severity = nullCount / dataset.content!.length > 0.2 ? 'high' : 
+                      nullCount / dataset.content!.length > 0.05 ? 'medium' : 'low';
+      
+      suggestions.push({
+        column,
+        issue: `Missing values (${nullCount} rows, ${Math.round(nullCount/dataset.content!.length*100)}%)`,
+        suggestion: severity === 'high' ? 
+          "Consider imputing missing values or removing the column if too sparse." : 
+          "Consider replacing missing values with appropriate defaults.",
+        severity
+      });
+    }
     
-    return responses[Math.floor(Math.random() * responses.length)];
+    const uniqueTypes = new Set();
+    let isDate = true;
+    let isNumeric = true;
+    
+    const sampleRows = dataset.content!.slice(0, 100);
+    for (const row of sampleRows) {
+      const value = row[column];
+      if (value === null || value === undefined || value === '') continue;
+      
+      if (!isNaN(Number(value))) {
+        uniqueTypes.add('number');
+      } 
+      else if (!isNaN(Date.parse(value))) {
+        uniqueTypes.add('date');
+      } 
+      else {
+        uniqueTypes.add('string');
+        isDate = false;
+        isNumeric = false;
+      }
+    }
+    
+    if (uniqueTypes.size > 1) {
+      columnsWithIssues++;
+      suggestions.push({
+        column,
+        issue: "Inconsistent data types",
+        suggestion: "Standardize values to maintain a consistent type throughout the column.",
+        severity: 'medium'
+      });
+    }
+  });
+  
+  const dataQuality = columnsWithIssues / dataset.headers.length;
+  let qualityRating: string;
+  
+  if (dataQuality > 0.3) {
+    qualityRating = "Poor";
+    summary.push(`I've analyzed "${dataset.name}" and found significant quality issues that need attention.`);
+  } else if (dataQuality > 0.1) {
+    qualityRating = "Fair";
+    summary.push(`I've analyzed "${dataset.name}" and found some quality issues that should be addressed.`);
+  } else if (columnsWithIssues > 0) {
+    qualityRating = "Good";
+    summary.push(`I've analyzed "${dataset.name}" and found minor quality issues that could be improved.`);
+  } else {
+    qualityRating = "Excellent";
+    summary.push(`I've analyzed "${dataset.name}" and it appears to have excellent data quality with no obvious issues.`);
   }
+  
+  summary.push(`**Data Quality Rating**: ${qualityRating}`);
+  if (totalNullCount > 0) {
+    summary.push(`**Missing Values**: ${totalNullCount} values missing across ${columnsWithIssues} columns`);
+  }
+  
+  let response = summary.join('\n\n');
+  
+  if (suggestions.length > 0) {
+    response += '\n\n**Detailed Issues**:\n';
+    
+    const highSeverity = suggestions.filter(s => s.severity === 'high');
+    const mediumSeverity = suggestions.filter(s => s.severity === 'medium');
+    const lowSeverity = suggestions.filter(s => s.severity === 'low');
+    
+    if (highSeverity.length > 0) {
+      response += '\n❌ **Critical Issues**:\n';
+      highSeverity.forEach(s => {
+        response += `- **${s.column}**: ${s.issue}\n  → ${s.suggestion}\n`;
+      });
+    }
+    
+    if (mediumSeverity.length > 0) {
+      response += '\n⚠️ **Warnings**:\n';
+      mediumSeverity.forEach(s => {
+        response += `- **${s.column}**: ${s.issue}\n  → ${s.suggestion}\n`;
+      });
+    }
+    
+    if (lowSeverity.length > 0) {
+      response += '\n📝 **Minor Issues**:\n';
+      lowSeverity.forEach(s => {
+        response += `- **${s.column}**: ${s.issue}\n  → ${s.suggestion}\n`;
+      });
+    }
+  }
+  
+  response += '\n\n**Next Steps**:\n';
+  if (suggestions.length > 0) {
+    response += '1. Address the issues above, starting with critical ones\n';
+    response += '2. Run validation again after making changes\n';
+    response += '3. Consider setting up automated validation rules\n';
+  } else {
+    response += '1. Your data looks good! Consider setting up validation rules to maintain quality\n';
+    response += '2. You can proceed confidently with your analysis\n';
+  }
+  
+  return response;
 };
 
 const AIChatbot = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your advanced data quality assistant. How can I help you today?",
+      content: "Hi! I'm your data validation assistant. How can I help analyze and improve your datasets today?",
       sender: 'assistant',
       timestamp: new Date()
     }
@@ -149,20 +231,38 @@ const AIChatbot = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([
-    "How does data profiling work?",
-    "Tell me about custom validation rules",
-    "How can I detect anomalies in my data?",
-    "What's data lineage tracking?"
+    "Analyze my dataset for quality issues",
+    "What data validation rules should I use?",
+    "How can I fix missing values?",
+    "Check my CSV file for errors"
   ]);
+  const [availableDatasets, setAvailableDatasets] = useState<DatasetType[]>([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
 
-  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    if (isOpen && !isMinimized) {
+      fetchDatasets();
+    }
+  }, [isOpen, isMinimized]);
+
+  const fetchDatasets = async () => {
+    setLoadingDatasets(true);
+    try {
+      const datasets = await getDatasets();
+      setAvailableDatasets(datasets);
+    } catch (error) {
+      console.error('Error fetching datasets:', error);
+    } finally {
+      setLoadingDatasets(false);
+    }
+  };
+
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // Focus input when chat opens
   useEffect(() => {
     if (isOpen && !isMinimized && inputRef.current) {
       inputRef.current.focus();
@@ -174,7 +274,6 @@ const AIChatbot = () => {
     
     if (!inputValue.trim()) return;
     
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputValue,
@@ -188,10 +287,10 @@ const AIChatbot = () => {
     setIsSuggesting(false);
     
     try {
-      // Get AI response with message history for context
-      const response = await getAIResponse(inputValue, messages);
+      await fetchDatasets();
       
-      // Add AI message
+      const response = await getDataValidationResponse(inputValue, messages, availableDatasets);
+      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: response,
@@ -201,7 +300,6 @@ const AIChatbot = () => {
       
       setMessages(prev => [...prev, aiMessage]);
       
-      // Update suggestions based on conversation context
       generateNewSuggestions(inputValue, response);
     } catch (error) {
       console.error('Error getting AI response:', error);
@@ -219,45 +317,34 @@ const AIChatbot = () => {
     const lowerUserInput = userInput.toLowerCase();
     const lowerAiResponse = aiResponse.toLowerCase();
     
-    // Generate contextual suggestions based on the conversation
     const newSuggestions: string[] = [];
     
-    if (lowerUserInput.includes('profil') || lowerAiResponse.includes('profil')) {
-      newSuggestions.push("Show me a sample data profile");
-      newSuggestions.push("How does column-level profiling work?");
+    if (lowerUserInput.includes('valid') || lowerUserInput.includes('check') || lowerAiResponse.includes('quality')) {
+      newSuggestions.push("What validation rules should I set up?");
+      newSuggestions.push("How do I fix these quality issues?");
     }
     
-    if (lowerUserInput.includes('validat') || lowerAiResponse.includes('validat')) {
-      newSuggestions.push("What are best practices for data validation?");
-      newSuggestions.push("How do I create custom validation rules?");
+    if (lowerUserInput.includes('miss') || lowerUserInput.includes('missing')) {
+      newSuggestions.push("What's the best way to handle missing values?");
+      newSuggestions.push("Should I remove or impute missing data?");
     }
     
-    if (lowerUserInput.includes('anomal') || lowerAiResponse.includes('anomal') || 
-        lowerUserInput.includes('ml') || lowerAiResponse.includes('machine learning')) {
-      newSuggestions.push("How accurate is anomaly detection?");
-      newSuggestions.push("Can I see examples of detected anomalies?");
+    if (lowerUserInput.includes('type') || lowerAiResponse.includes('type')) {
+      newSuggestions.push("How do I fix inconsistent data types?");
+      newSuggestions.push("Can you help me standardize date formats?");
     }
     
-    if (lowerUserInput.includes('lineage') || lowerAiResponse.includes('lineage')) {
-      newSuggestions.push("How detailed is the lineage tracking?");
-      newSuggestions.push("How does lineage help with compliance?");
+    if (availableDatasets.length > 0) {
+      const randomDataset = availableDatasets[Math.floor(Math.random() * availableDatasets.length)];
+      newSuggestions.push(`Analyze the quality of ${randomDataset.name}`);
     }
     
-    // Add database specific suggestions
-    if (lowerUserInput.includes('database') || lowerUserInput.includes('postgres') || 
-        lowerAiResponse.includes('database') || lowerAiResponse.includes('postgres')) {
-      newSuggestions.push("How secure are database connections?");
-      newSuggestions.push("Can I validate data directly in the database?");
-    }
-    
-    // Add some default suggestions if we couldn't generate contextual ones
     if (newSuggestions.length < 2) {
-      newSuggestions.push("Tell me about data comparison features");
-      newSuggestions.push("How can I schedule automated validations?");
-      newSuggestions.push("What export formats are supported?");
+      newSuggestions.push("What are best practices for data quality?");
+      newSuggestions.push("List my datasets");
+      newSuggestions.push("How do I validate a numerical column?");
     }
     
-    // Limit to 4 suggestions and randomize if we have more
     while (newSuggestions.length > 4) {
       const randomIndex = Math.floor(Math.random() * newSuggestions.length);
       newSuggestions.splice(randomIndex, 1);
@@ -269,6 +356,9 @@ const AIChatbot = () => {
   const toggleChatbot = () => {
     setIsOpen(prev => !prev);
     setIsMinimized(false);
+    if (!isOpen) {
+      fetchDatasets();
+    }
   };
 
   const toggleMinimize = () => {
@@ -281,6 +371,53 @@ const AIChatbot = () => {
     inputRef.current?.focus();
   };
 
+  const renderMessage = (message: Message) => {
+    if (message.sender === 'assistant') {
+      const parts = [];
+      let currentText = '';
+      let inBold = false;
+      
+      for (let i = 0; i < message.content.length; i++) {
+        if (message.content.substring(i, i + 2) === '**') {
+          if (currentText) {
+            parts.push({ type: inBold ? 'bold' : 'text', content: currentText });
+            currentText = '';
+          }
+          inBold = !inBold;
+          i++;
+        } else if (message.content.substring(i, i + 1) === '\n') {
+          if (currentText) {
+            parts.push({ type: inBold ? 'bold' : 'text', content: currentText });
+            currentText = '';
+          }
+          parts.push({ type: 'break' });
+        } else {
+          currentText += message.content[i];
+        }
+      }
+      
+      if (currentText) {
+        parts.push({ type: inBold ? 'bold' : 'text', content: currentText });
+      }
+      
+      return (
+        <div className="text-sm">
+          {parts.map((part, index) => {
+            if (part.type === 'bold') {
+              return <span key={index} className="font-semibold">{part.content}</span>;
+            } else if (part.type === 'break') {
+              return <br key={index} />;
+            } else {
+              return <span key={index}>{part.content}</span>;
+            }
+          })}
+        </div>
+      );
+    }
+    
+    return <p className="text-sm">{message.content}</p>;
+  };
+
   if (!isOpen) {
     return (
       <Button
@@ -288,7 +425,7 @@ const AIChatbot = () => {
         className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg"
         size="icon"
       >
-        <Bot className="h-6 w-6" />
+        <FileText className="h-6 w-6" />
       </Button>
     );
   }
@@ -297,8 +434,8 @@ const AIChatbot = () => {
     <Card className={`fixed bottom-6 right-6 shadow-lg w-80 sm:w-96 transition-all ${isMinimized ? 'h-14' : 'h-[500px] max-h-[80vh]'} z-50`}>
       <CardHeader className="p-3 border-b flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-md flex items-center">
-          <Bot className="h-5 w-5 mr-2 text-blue-600" />
-          Data Quality Assistant
+          <FileText className="h-5 w-5 mr-2 text-blue-600" />
+          Data Validation Assistant
         </CardTitle>
         <div className="flex gap-1.5">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleMinimize}>
@@ -324,7 +461,7 @@ const AIChatbot = () => {
                       {message.sender === 'user' ? (
                         <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       ) : (
-                        <Bot className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                        <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                       )}
                     </div>
                     <div
@@ -334,7 +471,7 @@ const AIChatbot = () => {
                           : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      {renderMessage(message)}
                       <p className="text-[10px] mt-1 opacity-70">
                         {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
@@ -367,7 +504,7 @@ const AIChatbot = () => {
               <Input
                 ref={inputRef}
                 type="text"
-                placeholder="Ask about data quality..."
+                placeholder="Ask about data validation..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onFocus={() => setIsSuggesting(true)}

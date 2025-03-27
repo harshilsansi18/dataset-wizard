@@ -1,6 +1,7 @@
 
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
+import { toast } from "@/hooks/use-toast";
 
 // Persistent storage using localStorage
 const VALIDATION_RESULTS_STORAGE_KEY = "soda_core_validation_results";
@@ -25,6 +26,11 @@ const saveToStorage = (data: any) => {
     localStorage.setItem(VALIDATION_RESULTS_STORAGE_KEY, JSON.stringify(data));
   } catch (error) {
     console.error(`Error saving to ${VALIDATION_RESULTS_STORAGE_KEY}:`, error);
+    toast({
+      title: "Storage Error",
+      description: "Failed to save validation results locally. Storage might be full.",
+      variant: "destructive",
+    });
   }
 };
 
@@ -105,6 +111,104 @@ const validateDataTypes = (data: any[], headers: string[]): { status: Validation
     return { 
       status: 'Fail', 
       details: `Inconsistent data types found in columns: ${inconsistentColumns.join(', ')}` 
+    };
+  }
+};
+
+// Enhanced AI-powered validation
+const validateWithAI = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string } => {
+  // Simulated AI validation that would normally use a machine learning model
+  // This looks for patterns and anomalies that simple rule-based validation might miss
+  
+  const anomalies: string[] = [];
+  const insights: string[] = [];
+  
+  // Check for outliers in numeric columns using IQR (simplified)
+  headers.forEach(header => {
+    // Skip processing if no data
+    if (data.length === 0) return;
+    
+    // Get all numeric values in the column
+    const values = data
+      .map(row => row[header])
+      .filter(val => val !== null && val !== undefined && val !== '' && !isNaN(Number(val)))
+      .map(val => Number(val));
+    
+    // Skip if not enough numeric values
+    if (values.length < data.length * 0.5) return;
+    
+    // Sort values for quartile calculation
+    values.sort((a, b) => a - b);
+    
+    // Calculate quartiles (simplified)
+    const q1Index = Math.floor(values.length * 0.25);
+    const q3Index = Math.floor(values.length * 0.75);
+    const q1 = values[q1Index];
+    const q3 = values[q3Index];
+    const iqr = q3 - q1;
+    
+    // Define outlier thresholds
+    const lowerBound = q1 - 1.5 * iqr;
+    const upperBound = q3 + 1.5 * iqr;
+    
+    // Count outliers
+    const outliers = values.filter(val => val < lowerBound || val > upperBound);
+    
+    if (outliers.length > 0) {
+      const outlierPercentage = (outliers.length / values.length * 100).toFixed(1);
+      anomalies.push(`${header}: ${outliers.length} outliers (${outlierPercentage}%) detected outside normal range.`);
+    }
+    
+    // Generate statistical insights
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const min = values[0];
+    const max = values[values.length - 1];
+    
+    insights.push(`${header}: Range ${min} to ${max}, Average ${mean.toFixed(2)}`);
+  });
+  
+  // Pattern detection in string columns (simplified)
+  headers.forEach(header => {
+    // Get all string values
+    const stringValues = data
+      .map(row => row[header])
+      .filter(val => val !== null && val !== undefined && val !== '' && isNaN(Number(val)))
+      .map(val => String(val));
+    
+    // Skip if not enough string values
+    if (stringValues.length < data.length * 0.5) return;
+    
+    // Check for email patterns
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailLikeValues = stringValues.filter(val => emailPattern.test(val));
+    
+    if (emailLikeValues.length > 0 && emailLikeValues.length < stringValues.length) {
+      anomalies.push(`${header}: May contain emails (${emailLikeValues.length}/${stringValues.length}) but format is inconsistent.`);
+    }
+    
+    // Check for date-like strings that aren't parsed as dates
+    const datePattern = /\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/;
+    const dateLikeValues = stringValues.filter(val => datePattern.test(val) && isNaN(Date.parse(val)));
+    
+    if (dateLikeValues.length > 0) {
+      anomalies.push(`${header}: Contains ${dateLikeValues.length} date-like values that aren't in a standard format.`);
+    }
+  });
+  
+  if (anomalies.length === 0) {
+    return {
+      status: 'Pass',
+      details: 'AI validation found no anomalies or patterns of concern.'
+    };
+  } else if (anomalies.length <= 2) {
+    return {
+      status: 'Warning',
+      details: `AI validation found minor anomalies: ${anomalies.join(' ')}${insights.length > 0 ? ' Additional insights: ' + insights.join(' ') : ''}`
+    };
+  } else {
+    return {
+      status: 'Fail',
+      details: `AI validation found multiple anomalies: ${anomalies.join(' ')}`
     };
   }
 };
@@ -213,13 +317,24 @@ export const runValidation = (
               ? `Found potential duplicates: ${dataset.content.length - distinctCount} rows may be duplicated.` 
               : 'No duplicates detected in the first few columns.'
           });
+          
+          // Add AI-powered validation
+          const aiValidationResult = validateWithAI(dataset.content, dataset.headers);
+          results.push({
+            id: `vr_${Date.now()}_5`,
+            datasetId,
+            timestamp,
+            check: 'AI-powered anomaly detection',
+            status: aiValidationResult.status,
+            details: aiValidationResult.details
+          });
         }
         
         // Add custom SQL check
         if (method === 'custom' && customSQL) {
           const sqlResult = validateCustomSQL(dataset.content, customSQL);
           results.push({
-            id: `vr_${Date.now()}_5`,
+            id: `vr_${Date.now()}_6`,
             datasetId,
             timestamp,
             check: `Custom SQL: ${customSQL.substring(0, 30)}...`,
