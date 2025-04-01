@@ -1,3 +1,4 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,8 @@ const getDataValidationResponse = async (
   messageHistory: Message[],
   availableDatasets?: DatasetType[]
 ): Promise<string> => {
+  console.log("Processing chatbot message with datasets:", availableDatasets?.length);
+  
   if (!availableDatasets || availableDatasets.length === 0) {
     return "I don't see any datasets available. Please upload a dataset first or connect to your database to import tables.";
   }
@@ -44,14 +47,11 @@ const getDataValidationResponse = async (
     lowerMessage.includes(ds.name.toLowerCase())
   );
   
-  if (isValidationQuery && datasetMentioned) {
-    return generateDatasetAnalysis(datasetMentioned);
-  }
-  
   if (isValidationQuery) {
-    // We have datasets but user didn't specify which one
-    // Select the first one for demonstration
-    return generateDatasetAnalysis(availableDatasets[0]);
+    // Select the mentioned dataset or the first one if none mentioned
+    const datasetToAnalyze = datasetMentioned || availableDatasets[0];
+    console.log("Analyzing dataset:", datasetToAnalyze.name);
+    return generateDatasetAnalysis(datasetToAnalyze);
   }
   
   if (lowerMessage.includes('list') && (lowerMessage.includes('dataset') || lowerMessage.includes('data'))) {
@@ -88,6 +88,8 @@ const getDataValidationResponse = async (
 };
 
 const generateDatasetAnalysis = (dataset: DatasetType): string => {
+  console.log("Generating analysis for dataset:", dataset.name);
+  
   if (!dataset.content || !dataset.headers) {
     return `I'd like to analyze "${dataset.name}" but I can't access its content. Please ensure the dataset is properly loaded.`;
   }
@@ -271,7 +273,11 @@ const AIChatbot = () => {
 
   useEffect(() => {
     if (isOpen && !isMinimized && inputRef.current) {
-      inputRef.current.focus();
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 100);
     }
   }, [isOpen, isMinimized]);
 
@@ -375,7 +381,9 @@ const AIChatbot = () => {
   const handleSuggestionClick = (suggestion: string) => {
     setInputValue(suggestion);
     setIsSuggesting(false);
-    inputRef.current?.focus();
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
 
   const renderMessage = (message: Message) => {
@@ -429,7 +437,7 @@ const AIChatbot = () => {
     return (
       <Button
         onClick={toggleChatbot}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg z-50"
         size="icon"
       >
         <FileText className="h-6 w-6" />
@@ -517,13 +525,18 @@ const AIChatbot = () => {
                 onFocus={() => setIsSuggesting(true)}
                 disabled={isLoading}
                 className="flex-1"
+                autoComplete="off"
               />
               <Button 
                 type="submit" 
                 size="icon" 
                 disabled={isLoading || !inputValue.trim()}
               >
-                <Send className="h-4 w-4" />
+                {isLoading ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </form>
           </CardFooter>

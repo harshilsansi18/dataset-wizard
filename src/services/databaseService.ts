@@ -17,6 +17,33 @@ export const postgresConfig = {
   lastConnected: null as string | null
 };
 
+// Initialize the database state from localStorage on module load
+(function initializePostgresState() {
+  try {
+    const savedConnection = localStorage.getItem('postgres_connection');
+    if (savedConnection) {
+      const connectionData = JSON.parse(savedConnection);
+      postgresConfig.isConnected = connectionData.isConnected;
+      postgresConfig.host = connectionData.host;
+      postgresConfig.port = connectionData.port;
+      postgresConfig.database = connectionData.database;
+      postgresConfig.user = connectionData.user;
+      postgresConfig.connectionUrl = connectionData.connectionUrl;
+      postgresConfig.lastConnected = connectionData.lastConnected;
+      
+      // Also load imported datasets
+      const savedDatasets = localStorage.getItem('db_imported_datasets');
+      if (savedDatasets) {
+        postgresConfig.importedDatasets = JSON.parse(savedDatasets);
+      }
+      
+      console.log('Initialized database connection from localStorage');
+    }
+  } catch (err) {
+    console.error('Failed to initialize database connection:', err);
+  }
+})();
+
 export const connectToDatabase = async (
   connectionParams: {
     host: string;

@@ -23,7 +23,7 @@ import {
   FileText,
   Calendar
 } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { getDatasets, runValidation, DatasetType, ValidationResult, getImportedDatasets } from "@/services/api";
 
@@ -47,9 +47,16 @@ const Validation = () => {
     setLoading(true);
     try {
       // Get datasets from all sources
-      const data = await getDatasets();
-      console.log("Validation page loaded datasets:", data.length);
-      setDatasets(data);
+      const fileDatasets = await getDatasets();
+      const dbDatasets = await getImportedDatasets();
+      
+      console.log("File datasets:", fileDatasets.length);
+      console.log("Database datasets:", dbDatasets.length);
+      
+      const allDatasets = [...fileDatasets, ...dbDatasets];
+      setDatasets(allDatasets);
+      
+      console.log("Validation page loaded datasets:", allDatasets.length);
     } catch (error) {
       console.error("Error fetching datasets:", error);
       toast({
