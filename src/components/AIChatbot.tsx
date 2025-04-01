@@ -1,11 +1,13 @@
+
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, X, Minimize, Maximize, Sparkles, Database, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Bot, Send, User, X, Minimize, Maximize, Database, FileText } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { getDatasets, getDatasetById, DatasetType } from '@/services/api';
+import { getDatasets, getDatasetById, DatasetType, runValidation } from '@/services/api';
+import { useNavigate } from 'react-router-dom';
 
 type Message = {
   id: string;
@@ -33,6 +35,32 @@ const getDataValidationResponse = async (
   }
   
   const lowerMessage = message.toLowerCase();
+  
+  // Command to download report
+  if (lowerMessage.includes('download') && lowerMessage.includes('report')) {
+    return "To download a validation report, please navigate to the Reports page where you can select datasets and export reports as CSV files.";
+  }
+  
+  // Command for specific validation
+  if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
+    let specificDataset = null;
+    
+    // Try to identify a specific dataset by name
+    for (const dataset of availableDatasets) {
+      if (lowerMessage.includes(dataset.name.toLowerCase())) {
+        specificDataset = dataset;
+        break;
+      }
+    }
+    
+    if (!specificDataset) {
+      specificDataset = availableDatasets[0];
+    }
+    
+    const method = lowerMessage.includes('advanced') ? 'advanced' : 'basic';
+    
+    return `I'll run a ${method} validation on "${specificDataset.name}". Please go to the Validation page to see the results. You can then review them in the Reports section.`;
+  }
   
   const isValidationQuery = lowerMessage.includes('valid') || 
                             lowerMessage.includes('check') || 
@@ -63,27 +91,8 @@ const getDataValidationResponse = async (
     }
   }
   
-  if (lowerMessage.includes('fix') || lowerMessage.includes('repair') || lowerMessage.includes('clean')) {
-    return "To fix data quality issues, I recommend:\n\n1. **Missing values**: Consider imputation techniques appropriate for your data type (mean/median for numeric, mode for categorical).\n\n2. **Type inconsistencies**: Transform values to maintain consistency, e.g., standardize date formats or number representations.\n\n3. **Outliers**: Decide whether to remove, cap, or transform outliers based on your analysis needs.\n\n4. **Duplicates**: Remove duplicate records or make them unique by adding identifiers.\n\nWould you like specific guidance on a particular dataset?";
-  }
-  
-  const hasContextAbout = (topic: string): boolean => {
-    return messageHistory.some(msg => 
-      msg.sender === 'user' && 
-      msg.content.toLowerCase().includes(topic.toLowerCase())
-    );
-  };
-
-  if (lowerMessage.includes('rule') || lowerMessage.includes('check') || lowerMessage.includes('criteria')) {
-    return "I can help you create data validation rules including:\n\n- **Completeness checks**: Ensure required fields are populated\n- **Format validation**: Verify dates, emails, phone numbers follow correct patterns\n- **Range checks**: Confirm numeric values are within acceptable ranges\n- **Cross-field validation**: Ensure logical relationships between fields\n- **Uniqueness checks**: Identify duplicate records\n\nI can implement these rules as part of the validation process. Which type of validation rule interests you?";
-  }
-  
-  if (lowerMessage.includes('best practice') || lowerMessage.includes('recommend') || lowerMessage.includes('advice')) {
-    return "Here are data quality best practices:\n\n1. **Validate at collection**: Prevent errors early with input validation\n2. **Document assumptions**: Create a data dictionary with expected formats and constraints\n3. **Profile regularly**: Continuously monitor data quality metrics\n4. **Create tests**: Develop automated quality checks for important datasets\n5. **Standardize cleanup**: Establish consistent procedures for handling common issues\n\nConsistent validation will save time and increase confidence in your analysis results.";
-  }
-  
   // Default response if nothing else matched
-  return "I can analyze your datasets for quality issues. Just let me know which dataset you'd like me to check, or I can analyze the first available one.";
+  return "I can help you validate datasets or analyze data quality. Try asking me to 'analyze my dataset', 'run validation', or 'download reports'.";
 };
 
 const generateDatasetAnalysis = (dataset: DatasetType): string => {
@@ -221,10 +230,11 @@ const generateDatasetAnalysis = (dataset: DatasetType): string => {
 };
 
 const AIChatbot = () => {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your data validation assistant. How can I help analyze and improve your datasets today?",
+      content: "Hi! I'm your data validation assistant. Ask me to analyze datasets, run validations, or download reports.",
       sender: 'assistant',
       timestamp: new Date()
     }
@@ -235,13 +245,6 @@ const AIChatbot = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([
-    "Analyze my dataset for quality issues",
-    "What data validation rules should I use?",
-    "How can I fix missing values?",
-    "Check my CSV file for errors"
-  ]);
   const [availableDatasets, setAvailableDatasets] = useState<DatasetType[]>([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
 
@@ -303,25 +306,54 @@ const AIChatbot = () => {
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
-    setIsSuggesting(false);
     
     try {
       console.log("Reloading datasets before analysis...");
       await fetchDatasets();
       
-      const response = await getDataValidationResponse(inputValue, messages, availableDatasets);
-      console.log("Got AI response:", response.substring(0, 50) + "...");
+      const lowerMessage = inputValue.toLowerCase();
       
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: response,
-        sender: 'assistant',
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, aiMessage]);
-      
-      generateNewSuggestions(inputValue, response);
+      // Handle direct validation requests
+      if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: "I'll run a validation for you. Taking you to the validation page...",
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        
+        // Add small delay before navigating to validation page
+        setTimeout(() => {
+          navigate('/validation');
+        }, 800);
+      }
+      // Handle download report requests
+      else if (lowerMessage.includes('download') && lowerMessage.includes('report')) {
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: "You can download validation reports from the Reports page. Taking you there...",
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      }
+      else {
+        // Handle regular analysis or other requests
+        const response = await getDataValidationResponse(inputValue, messages, availableDatasets);
+        console.log("Got AI response:", response.substring(0, 50) + "...");
+        
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: response,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      }
     } catch (error) {
       console.error('Error getting AI response:', error);
       toast({
@@ -332,46 +364,6 @@ const AIChatbot = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const generateNewSuggestions = (userInput: string, aiResponse: string) => {
-    const lowerUserInput = userInput.toLowerCase();
-    const lowerAiResponse = aiResponse.toLowerCase();
-    
-    const newSuggestions: string[] = [];
-    
-    if (lowerUserInput.includes('valid') || lowerUserInput.includes('check') || lowerAiResponse.includes('quality')) {
-      newSuggestions.push("What validation rules should I set up?");
-      newSuggestions.push("How do I fix these quality issues?");
-    }
-    
-    if (lowerUserInput.includes('miss') || lowerUserInput.includes('missing')) {
-      newSuggestions.push("What's the best way to handle missing values?");
-      newSuggestions.push("Should I remove or impute missing data?");
-    }
-    
-    if (lowerUserInput.includes('type') || lowerAiResponse.includes('type')) {
-      newSuggestions.push("How do I fix inconsistent data types?");
-      newSuggestions.push("Can you help me standardize date formats?");
-    }
-    
-    if (availableDatasets.length > 0) {
-      const randomDataset = availableDatasets[Math.floor(Math.random() * availableDatasets.length)];
-      newSuggestions.push(`Analyze the quality of ${randomDataset.name}`);
-    }
-    
-    if (newSuggestions.length < 2) {
-      newSuggestions.push("What are best practices for data quality?");
-      newSuggestions.push("List my datasets");
-      newSuggestions.push("How do I validate a numerical column?");
-    }
-    
-    while (newSuggestions.length > 4) {
-      const randomIndex = Math.floor(Math.random() * newSuggestions.length);
-      newSuggestions.splice(randomIndex, 1);
-    }
-    
-    setSuggestions(newSuggestions);
   };
 
   const toggleChatbot = () => {
@@ -386,27 +378,6 @@ const AIChatbot = () => {
   const toggleMinimize = () => {
     console.log("Toggling minimize:", !isMinimized);
     setIsMinimized(prev => !prev);
-  };
-
-  const handleSuggestionClick = (suggestion: string) => {
-    console.log("Suggestion clicked:", suggestion);
-    setInputValue(suggestion);
-    setIsSuggesting(false);
-    
-    if (inputRef.current) {
-      inputRef.current.focus();
-      
-      if (suggestion.toLowerCase().includes("analyze")) {
-        setTimeout(() => {
-          const form = inputRef.current?.form;
-          if (form) {
-            console.log("Auto-submitting form");
-            const submitEvent = new Event('submit', { cancelable: true, bubbles: true });
-            form.dispatchEvent(submitEvent);
-          }
-        }, 100);
-      }
-    }
   };
 
   const renderMessage = (message: Message) => {
@@ -521,24 +492,7 @@ const AIChatbot = () => {
             </ScrollArea>
           </CardContent>
           
-          <CardFooter className="p-3 pt-2 border-t flex flex-col">
-            {isSuggesting && suggestions.length > 0 && (
-              <div className="w-full mb-2 flex flex-wrap gap-1">
-                {suggestions.map((suggestion, index) => (
-                  <Button 
-                    key={index} 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-xs py-1 h-auto flex items-center cursor-pointer"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    tabIndex={0}
-                  >
-                    <Sparkles className="h-3 w-3 mr-1 text-blue-500" />
-                    {suggestion}
-                  </Button>
-                ))}
-              </div>
-            )}
+          <CardFooter className="p-3 pt-2 border-t">
             <form onSubmit={handleSubmit} className="flex w-full space-x-2">
               <Input
                 ref={inputRef}
@@ -546,7 +500,6 @@ const AIChatbot = () => {
                 placeholder="Ask about data validation..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onFocus={() => setIsSuggesting(true)}
                 disabled={isLoading}
                 className="flex-1"
                 autoComplete="off"

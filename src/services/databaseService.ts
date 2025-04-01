@@ -93,6 +93,22 @@ export const connectToDatabase = async (
   });
 };
 
+// Force refresh of imported datasets - useful for ensuring they're visible in reports
+export const refreshImportedDatasets = (): DatasetType[] => {
+  try {
+    // Load from localStorage
+    const savedDatasets = localStorage.getItem('db_imported_datasets');
+    if (savedDatasets) {
+      postgresConfig.importedDatasets = JSON.parse(savedDatasets);
+      console.log('Forcefully refreshed datasets:', postgresConfig.importedDatasets.length);
+    }
+    return postgresConfig.importedDatasets;
+  } catch (err) {
+    console.error('Failed to refresh imported datasets:', err);
+    return [];
+  }
+};
+
 // Ensure datasets are visible in validation page by adding a helper function
 export const ensureImportedDatasetsAvailable = (): void => {
   try {

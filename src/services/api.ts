@@ -10,7 +10,8 @@ import {
   disconnectDatabase, 
   postgresConfig,
   initDatabaseConnection,
-  getImportedDatasets
+  getImportedDatasets,
+  refreshImportedDatasets
 } from './databaseService';
 
 // Re-export all service functions to streamline imports
@@ -35,7 +36,8 @@ export {
   disconnectDatabase,
   postgresConfig,
   initDatabaseConnection,
-  getImportedDatasets
+  getImportedDatasets,
+  refreshImportedDatasets
 };
 
 // Re-export types

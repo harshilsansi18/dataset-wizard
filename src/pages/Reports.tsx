@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Shield, 
   FileText, 
@@ -14,14 +14,19 @@ import {
   AlertTriangle,
   ArrowLeft,
   Search,
-  Filter,
   Eye
 } from "lucide-react";
-import { getAllValidationResults, getDatasets, DatasetType, ValidationResult } from "@/services/api";
+import { 
+  getAllValidationResults, 
+  getDatasets, 
+  refreshImportedDatasets, 
+  DatasetType, 
+  ValidationResult 
+} from "@/services/api";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion } from "framer-motion";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -40,25 +45,42 @@ const Reports = () => {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectedResult, setSelectedResult] = useState<ValidationResult | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [datasetFilter, setDatasetFilter] = useState("");
   
+  // Load datasets and validation results on initial page load
   useEffect(() => {
+    console.log("Reports page: Initial data load");
     fetchData();
   }, []);
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      console.log("Reports page: Fetching datasets and validation results");
       const [datasetsData, resultsData] = await Promise.all([
         getDatasets(),
         getAllValidationResults()
       ]);
       
-      setDatasets(datasetsData);
+      // Ensure imported database datasets are included
+      const importedDatasets = refreshImportedDatasets();
+      const allDatasets = [...datasetsData];
+      
+      // Add any database datasets that might be missing
+      importedDatasets.forEach(dbDataset => {
+        if (!allDatasets.some(ds => ds.id === dbDataset.id)) {
+          allDatasets.push(dbDataset);
+        }
+      });
+      
+      console.log(`Reports page: Loaded ${allDatasets.length} datasets and results for ${Object.keys(resultsData).length} datasets`);
+      setDatasets(allDatasets);
       setValidationResults(resultsData);
       
       // Auto-select the first dataset with validation results
       if (Object.keys(resultsData).length > 0 && !selectedDataset) {
         setSelectedDataset(Object.keys(resultsData)[0]);
+        console.log("Auto-selected dataset:", Object.keys(resultsData)[0]);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -110,6 +132,11 @@ const Reports = () => {
       })
     : [];
 
+  const filteredDatasets = datasets.filter(dataset => {
+    return datasetFilter === "" || 
+      dataset.name.toLowerCase().includes(datasetFilter.toLowerCase());
+  });
+
   const selectedDatasetInfo = datasets.find(d => d.id === selectedDataset);
   const validationDate = selectedDataset && validationResults[selectedDataset] && 
     validationResults[selectedDataset].length > 0 
@@ -127,6 +154,7 @@ const Reports = () => {
     }
 
     try {
+      console.log("Exporting validation report for dataset:", selectedDatasetInfo?.name);
       const datasetName = selectedDatasetInfo?.name || "report";
       const date = new Date().toISOString().split('T')[0];
       const reportTitle = `Validation Report: ${datasetName} (${date})`;
@@ -158,7 +186,7 @@ const Reports = () => {
       
       toast({
         title: "Report Exported",
-        description: "The validation report has been downloaded",
+        description: "The validation report has been downloaded as CSV",
       });
     } catch (error) {
       console.error("Error exporting report:", error);
@@ -189,10 +217,21 @@ const Reports = () => {
             Detailed validation results and error reports
           </p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/validation')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Validation
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={fetchData}
+          >
+            Refresh Reports
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => navigate('/validation')}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Validation
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-4">
@@ -220,44 +259,53 @@ const Reports = () => {
                       type="text"
                       placeholder="Search datasets..."
                       className="h-9 w-full rounded-md border border-input pl-8 pr-3 text-sm"
+                      value={datasetFilter}
+                      onChange={(e) => setDatasetFilter(e.target.value)}
                     />
                   </div>
                   
                   <div className="mt-4 max-h-[500px] overflow-y-auto">
-                    {datasets.map(dataset => {
-                      const hasResults = validationResults[dataset.id] && validationResults[dataset.id].length > 0;
-                      return (
-                        <div
-                          key={dataset.id}
-                          className={`mb-2 cursor-pointer rounded-md border p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
-                            selectedDataset === dataset.id ? 'border-blue-500 bg-blue-50 dark:border-blue-900 dark:bg-blue-900/20' : ''
-                          } ${!hasResults ? 'opacity-50' : ''}`}
-                          onClick={() => hasResults && setSelectedDataset(dataset.id)}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <p className="font-medium">{dataset.name}</p>
-                              <p className="text-xs text-slate-500">{dataset.type} · {dataset.size}</p>
+                    {filteredDatasets.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Database className="h-10 w-10 text-slate-300 mb-2" />
+                        <p className="text-sm text-slate-500">No datasets found</p>
+                      </div>
+                    ) : (
+                      filteredDatasets.map(dataset => {
+                        const hasResults = validationResults[dataset.id] && validationResults[dataset.id].length > 0;
+                        return (
+                          <div
+                            key={dataset.id}
+                            className={`mb-2 cursor-pointer rounded-md border p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                              selectedDataset === dataset.id ? 'border-blue-500 bg-blue-50 dark:border-blue-900 dark:bg-blue-900/20' : ''
+                            } ${!hasResults ? 'opacity-50' : ''}`}
+                            onClick={() => hasResults && setSelectedDataset(dataset.id)}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium">{dataset.name}</p>
+                                <p className="text-xs text-slate-500">{dataset.type} · {dataset.size}</p>
+                              </div>
+                              <div className={`rounded-full px-2 py-0.5 text-xs ${
+                                dataset.status === 'Validated' 
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                  : dataset.status === 'Issues Found'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                                  : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                              }`}>
+                                {dataset.status}
+                              </div>
                             </div>
-                            <div className={`rounded-full px-2 py-0.5 text-xs ${
-                              dataset.status === 'Validated' 
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                : dataset.status === 'Issues Found'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                            }`}>
-                              {dataset.status}
-                            </div>
+                            {validationResults[dataset.id] && validationResults[dataset.id].length > 0 && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                <Calendar className="mr-1 inline-block h-3 w-3" />
+                                {new Date(validationResults[dataset.id][0].timestamp).toLocaleDateString()}
+                              </p>
+                            )}
                           </div>
-                          {validationResults[dataset.id] && validationResults[dataset.id].length > 0 && (
-                            <p className="mt-1 text-xs text-slate-500">
-                              <Calendar className="mr-1 inline-block h-3 w-3" />
-                              {new Date(validationResults[dataset.id][0].timestamp).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
@@ -335,13 +383,13 @@ const Reports = () => {
                   
                   <div className="ml-auto">
                     <Button 
-                      variant="outline" 
+                      variant="secondary" 
                       size="sm"
                       onClick={exportReport}
                       disabled={!filteredResults.length}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      Export Report
+                      Download Report
                     </Button>
                   </div>
                 </div>
@@ -450,7 +498,7 @@ const Reports = () => {
                 <p>{selectedResult?.details}</p>
               </div>
               
-              {selectedResult?.check === "Row Count Check" && (
+              {selectedResult?.check.includes("Row count") && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-500">Row Information</h4>
                   <p>
@@ -461,30 +509,39 @@ const Reports = () => {
                 </div>
               )}
               
-              {selectedResult?.check === "Null Values Check" && (
+              {selectedResult?.check.includes("missing value") && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-500">Null Values</h4>
                   <p>
-                    {selectedResult.details.includes("null values") 
-                      ? `Found ${selectedResult.details.match(/\d+/)?.[0] || "0"} null values in the first column.`
-                      : "No null values were found in the first column."}
+                    {selectedResult.details.includes("missing") 
+                      ? `Found ${selectedResult.details.match(/\d+/)?.[0] || "0"} missing values.`
+                      : "No null values were found."}
                   </p>
                   <p className="mt-2 text-sm text-slate-500">
-                    Null values can indicate missing data or data quality issues that may need to be addressed.
+                    Missing values can indicate data quality issues that may need to be addressed.
                   </p>
                 </div>
               )}
               
-              {selectedResult?.check === "Data Type Validation" && (
+              {selectedResult?.check.includes("Data type") && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-500">Data Types</h4>
                   <p>
-                    {selectedResult.details.includes("consistent numeric") 
-                      ? "All values in this column are consistent and have a numeric data type."
-                      : "This column contains mixed data types which may cause issues in data processing."}
+                    {selectedResult.details.includes("inconsistent") 
+                      ? "This dataset contains mixed data types which may cause issues in data processing."
+                      : "All values have consistent data types."}
                   </p>
                 </div>
               )}
+              
+              <div className="pt-2">
+                <Button 
+                  onClick={closeDetails} 
+                  className="w-full"
+                >
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
