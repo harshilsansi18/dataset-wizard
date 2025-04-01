@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -247,7 +246,12 @@ const AIChatbot = () => {
   const [loadingDatasets, setLoadingDatasets] = useState(false);
 
   useEffect(() => {
+    console.log("Chatbot state: open=", isOpen, "minimized=", isMinimized);
+  }, [isOpen, isMinimized]);
+
+  useEffect(() => {
     if (isOpen && !isMinimized) {
+      console.log("Fetching datasets for chatbot...");
       fetchDatasets();
     }
   }, [isOpen, isMinimized]);
@@ -272,12 +276,15 @@ const AIChatbot = () => {
   }, [messages]);
 
   useEffect(() => {
-    if (isOpen && !isMinimized && inputRef.current) {
-      setTimeout(() => {
+    if (isOpen && !isMinimized) {
+      const focusTimer = setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
+          console.log("Input focused");
         }
-      }, 100);
+      }, 300);
+      
+      return () => clearTimeout(focusTimer);
     }
   }, [isOpen, isMinimized]);
 
@@ -299,10 +306,11 @@ const AIChatbot = () => {
     setIsSuggesting(false);
     
     try {
-      // Force reload datasets before analysis
+      console.log("Reloading datasets before analysis...");
       await fetchDatasets();
       
       const response = await getDataValidationResponse(inputValue, messages, availableDatasets);
+      console.log("Got AI response:", response.substring(0, 50) + "...");
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -367,6 +375,7 @@ const AIChatbot = () => {
   };
 
   const toggleChatbot = () => {
+    console.log("Toggling chatbot:", !isOpen);
     setIsOpen(prev => !prev);
     setIsMinimized(false);
     if (!isOpen) {
@@ -375,14 +384,28 @@ const AIChatbot = () => {
   };
 
   const toggleMinimize = () => {
+    console.log("Toggling minimize:", !isMinimized);
     setIsMinimized(prev => !prev);
   };
 
   const handleSuggestionClick = (suggestion: string) => {
+    console.log("Suggestion clicked:", suggestion);
     setInputValue(suggestion);
     setIsSuggesting(false);
+    
     if (inputRef.current) {
       inputRef.current.focus();
+      
+      if (suggestion.toLowerCase().includes("analyze")) {
+        setTimeout(() => {
+          const form = inputRef.current?.form;
+          if (form) {
+            console.log("Auto-submitting form");
+            const submitEvent = new Event('submit', { cancelable: true, bubbles: true });
+            form.dispatchEvent(submitEvent);
+          }
+        }, 100);
+      }
     }
   };
 
@@ -506,8 +529,9 @@ const AIChatbot = () => {
                     key={index} 
                     variant="outline" 
                     size="sm" 
-                    className="text-xs py-1 h-auto flex items-center"
+                    className="text-xs py-1 h-auto flex items-center cursor-pointer"
                     onClick={() => handleSuggestionClick(suggestion)}
+                    tabIndex={0}
                   >
                     <Sparkles className="h-3 w-3 mr-1 text-blue-500" />
                     {suggestion}
@@ -526,11 +550,14 @@ const AIChatbot = () => {
                 disabled={isLoading}
                 className="flex-1"
                 autoComplete="off"
+                tabIndex={0}
+                aria-label="Chat input"
               />
               <Button 
                 type="submit" 
                 size="icon" 
                 disabled={isLoading || !inputValue.trim()}
+                tabIndex={0}
               >
                 {isLoading ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>

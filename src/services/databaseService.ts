@@ -31,13 +31,14 @@ export const postgresConfig = {
       postgresConfig.connectionUrl = connectionData.connectionUrl;
       postgresConfig.lastConnected = connectionData.lastConnected;
       
+      console.log('Initialized database connection from localStorage:', postgresConfig.database);
+      
       // Also load imported datasets
       const savedDatasets = localStorage.getItem('db_imported_datasets');
       if (savedDatasets) {
         postgresConfig.importedDatasets = JSON.parse(savedDatasets);
+        console.log('Loaded', postgresConfig.importedDatasets.length, 'datasets from localStorage');
       }
-      
-      console.log('Initialized database connection from localStorage');
     }
   } catch (err) {
     console.error('Failed to initialize database connection:', err);
@@ -83,12 +84,27 @@ export const connectToDatabase = async (
         description: `Successfully connected to ${connectionParams.database} on ${connectionParams.host}`,
       });
       
+      console.log('Database connected successfully:', postgresConfig.database);
       resolve(true);
     } catch (err) {
       console.error('Failed to connect to database:', err);
       reject(new Error('Failed to connect to database'));
     }
   });
+};
+
+// Ensure datasets are visible in validation page by adding a helper function
+export const ensureImportedDatasetsAvailable = (): void => {
+  try {
+    // Load from localStorage
+    const savedDatasets = localStorage.getItem('db_imported_datasets');
+    if (savedDatasets) {
+      postgresConfig.importedDatasets = JSON.parse(savedDatasets);
+      console.log('Ensured datasets available:', postgresConfig.importedDatasets.length);
+    }
+  } catch (err) {
+    console.error('Failed to ensure imported datasets are available:', err);
+  }
 };
 
 // Initialize connection from localStorage if available
@@ -105,13 +121,10 @@ export const initDatabaseConnection = (): void => {
       postgresConfig.connectionUrl = connectionData.connectionUrl;
       postgresConfig.lastConnected = connectionData.lastConnected;
       
-      // Also load imported datasets
-      const savedDatasets = localStorage.getItem('db_imported_datasets');
-      if (savedDatasets) {
-        postgresConfig.importedDatasets = JSON.parse(savedDatasets);
-      }
-      
       console.log('Restored database connection from localStorage');
+      
+      // Also load imported datasets
+      ensureImportedDatasetsAvailable();
     }
   } catch (err) {
     console.error('Failed to restore database connection:', err);
@@ -132,7 +145,7 @@ export const getDatabaseTables = async (): Promise<string[]> => {
   // For now, we'll return simulated tables
   return new Promise((resolve) => {
     setTimeout(() => {
-      resolve([
+      const tables = [
         "users",
         "products",
         "orders",
@@ -141,7 +154,9 @@ export const getDatabaseTables = async (): Promise<string[]> => {
         "customers",
         "suppliers",
         "categories"
-      ]);
+      ];
+      console.log(`Retrieved ${tables.length} tables from database`);
+      resolve(tables);
     }, 700);
   });
 };
@@ -197,6 +212,7 @@ export const importTableAsDataset = async (tableName: string): Promise<DatasetTy
       // Save to localStorage for persistence between page loads
       try {
         localStorage.setItem('db_imported_datasets', JSON.stringify(postgresConfig.importedDatasets));
+        console.log(`Dataset "${tableName}" imported and saved to localStorage`);
       } catch (err) {
         console.error('Failed to save imported dataset to localStorage:', err);
       }
@@ -207,16 +223,9 @@ export const importTableAsDataset = async (tableName: string): Promise<DatasetTy
 };
 
 export const getImportedDatasets = (): DatasetType[] => {
-  // Try to load from localStorage first
-  try {
-    const storedDatasets = localStorage.getItem('db_imported_datasets');
-    if (storedDatasets) {
-      postgresConfig.importedDatasets = JSON.parse(storedDatasets);
-    }
-  } catch (err) {
-    console.error('Failed to load imported datasets from localStorage:', err);
-  }
-  
+  // Try to load from localStorage first to ensure consistency
+  ensureImportedDatasetsAvailable();
+  console.log(`Returning ${postgresConfig.importedDatasets.length} imported datasets`);
   return postgresConfig.importedDatasets;
 };
 
@@ -232,6 +241,7 @@ export const disconnectDatabase = (): void => {
   // Clear connection from localStorage
   try {
     localStorage.removeItem('postgres_connection');
+    console.log('Database disconnected and removed from localStorage');
   } catch (err) {
     console.error('Failed to remove connection from localStorage:', err);
   }
