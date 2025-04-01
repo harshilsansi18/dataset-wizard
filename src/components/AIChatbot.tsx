@@ -1,13 +1,19 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, X, Minimize, Maximize, Database, FileText, Upload, Loader } from 'lucide-react';
+import { Bot, Send, User, X, Minimize, Maximize, Database, FileText, Upload, Loader, List, Check } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { getDatasets, getDatasetById, DatasetType, runValidation, uploadDataset } from '@/services/api';
+import { 
+  getDatasets, 
+  getDatasetById, 
+  DatasetType, 
+  runValidation, 
+  uploadDataset 
+} from '@/services/api';
 import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 type Message = {
   id: string;
@@ -41,27 +47,6 @@ const getDataValidationResponse = async (
     return "To download a validation report, please navigate to the Reports page where you can select datasets and export reports as CSV files.";
   }
   
-  // Command for specific validation
-  if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
-    let specificDataset = null;
-    
-    // Try to identify a specific dataset by name
-    for (const dataset of availableDatasets) {
-      if (lowerMessage.includes(dataset.name.toLowerCase())) {
-        specificDataset = dataset;
-        break;
-      }
-    }
-    
-    if (!specificDataset) {
-      specificDataset = availableDatasets[0];
-    }
-    
-    const method = lowerMessage.includes('advanced') ? 'advanced' : 'basic';
-    
-    return `I'll run a ${method} validation on "${specificDataset.name}". Please go to the Validation page to see the results. You can then review them in the Reports section.`;
-  }
-  
   const isValidationQuery = lowerMessage.includes('valid') || 
                             lowerMessage.includes('check') || 
                             lowerMessage.includes('quality') || 
@@ -75,10 +60,9 @@ const getDataValidationResponse = async (
   );
   
   if (isValidationQuery) {
-    // Select the mentioned dataset or the first one if none mentioned
-    const datasetToAnalyze = datasetMentioned || availableDatasets[0];
-    console.log("Analyzing dataset:", datasetToAnalyze.name);
-    return generateDatasetAnalysis(datasetToAnalyze);
+    // This will return a message that we should select a dataset
+    // We'll handle dataset selection in the component itself
+    return "SELECT_DATASET_FOR_VALIDATION";
   }
   
   if (lowerMessage.includes('list') && (lowerMessage.includes('dataset') || lowerMessage.includes('data'))) {
@@ -92,7 +76,7 @@ const getDataValidationResponse = async (
   }
   
   // Default response if nothing else matched
-  return "I can help you validate datasets or analyze data quality. Try asking me to 'analyze my dataset', 'run validation', or 'download reports'.";
+  return "I can help you validate datasets or analyze data quality. Try saying 'validate dataset', 'analyze data quality', 'download reports', or 'upload dataset'.";
 };
 
 const generateDatasetAnalysis = (dataset: DatasetType): string => {
@@ -234,7 +218,7 @@ const AIChatbot = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your data validation assistant. I can help you analyze data quality, run validations, and upload datasets. Try commands like 'analyze my dataset', 'run validation', 'upload a dataset', or 'download reports'.",
+      content: "Hi! I'm your data validation assistant. I can help you analyze data quality, run validations, and upload datasets. Try commands like 'validate dataset', 'analyze data', 'upload dataset', or 'download reports'.",
       sender: 'assistant',
       timestamp: new Date()
     }
@@ -244,12 +228,15 @@ const AIChatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showDatasetSelector, setShowDatasetSelector] = useState(false);
+  const [validationIntent, setValidationIntent] = useState<'analyze' | 'validate' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [availableDatasets, setAvailableDatasets] = useState<DatasetType[]>([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
   useEffect(() => {
     console.log("Chatbot state: open=", isOpen, "minimized=", isMinimized);
@@ -315,7 +302,7 @@ const AIChatbot = () => {
       
       const successMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: `Successfully uploaded ${file.name}. The dataset has ${uploadedDataset.rowCount} rows and ${uploadedDataset.columnCount} columns. Would you like me to analyze it now?`,
+        content: `Successfully uploaded ${file.name}. The dataset has ${uploadedDataset.rowCount} rows and ${uploadedDataset.columnCount} columns. You can now analyze it or run validations on it.`,
         sender: 'assistant',
         timestamp: new Date()
       };
@@ -344,6 +331,71 @@ const AIChatbot = () => {
         fileInputRef.current.value = '';
       }
       setShowUpload(false);
+    }
+  };
+
+  const handleDatasetSelection = async (datasetId: string) => {
+    setShowDatasetSelector(false);
+    setSelectedDatasetId(null);
+    
+    const dataset = availableDatasets.find(ds => ds.id === datasetId);
+    if (!dataset) {
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: "Sorry, I couldn't find that dataset. Please select another one.",
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      if (validationIntent === 'analyze') {
+        // Analyze the dataset
+        const analysis = generateDatasetAnalysis(dataset);
+        
+        const aiMessage: Message = {
+          id: Date.now().toString(),
+          content: analysis,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      } 
+      else if (validationIntent === 'validate') {
+        // Run validation
+        const aiMessage: Message = {
+          id: Date.now().toString(),
+          content: `I'll run a validation on "${dataset.name}". Taking you to the validation page...`,
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        
+        // Navigate to validation page with the selected dataset
+        setTimeout(() => {
+          navigate('/validation');
+          // Pass the selected dataset ID through sessionStorage
+          sessionStorage.setItem('selectedDatasetId', datasetId);
+        }, 800);
+      }
+    } catch (error) {
+      console.error('Error processing dataset:', error);
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: "Sorry, there was an error processing your request. Please try again.",
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setValidationIntent(null);
     }
   };
 
@@ -388,21 +440,34 @@ const AIChatbot = () => {
           }
         }, 300);
       }
-      // Handle direct validation requests
-      else if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
+      // Handle validation or analysis requests
+      else if (lowerMessage.includes('validate') || lowerMessage.includes('analyze') || lowerMessage.includes('check')) {
+        // First check if we have datasets
+        if (availableDatasets.length === 0) {
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: "You don't have any datasets available. Would you like to upload one now?",
+            sender: 'assistant',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, aiMessage]);
+          return;
+        }
+        
+        // Set validation intent based on message
+        const intent = lowerMessage.includes('validate') ? 'validate' : 'analyze';
+        setValidationIntent(intent);
+        
+        // Prompt user to select a dataset
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: "I'll run a validation for you. Taking you to the validation page...",
+          content: `Please select which dataset you would like to ${intent}:`,
           sender: 'assistant',
           timestamp: new Date()
         };
         
         setMessages(prev => [...prev, aiMessage]);
-        
-        // Add small delay before navigating to validation page
-        setTimeout(() => {
-          navigate('/validation');
-        }, 800);
+        setShowDatasetSelector(true);
       }
       // Handle download report requests
       else if (lowerMessage.includes('download') && lowerMessage.includes('report')) {
@@ -421,10 +486,10 @@ const AIChatbot = () => {
         }, 800);
       }
       // Handle local storage explanation
-      else if (lowerMessage.includes('postgres') && (lowerMessage.includes('store') || lowerMessage.includes('local') || lowerMessage.includes('share'))) {
+      else if (lowerMessage.includes('storage') || (lowerMessage.includes('share') && lowerMessage.includes('data'))) {
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: "This application stores PostgreSQL connection information and imported datasets in your browser's localStorage. This means:\n\n1. Database credentials are stored only in your browser\n2. When running locally, your data stays on your device\n3. If you share the site URL, others won't see your datasets as localStorage is specific to each user's browser\n4. To share datasets with others, you would need to export and send them the files",
+          content: "This application stores datasets and connection information in your browser's localStorage. This means:\n\n1. Your datasets are stored only in your browser\n2. When you share the deployed URL, others will NOT see your datasets\n3. Each user has their own private storage in their browser\n4. To share datasets with others, you would need to export and send them the files directly",
           sender: 'assistant',
           timestamp: new Date()
         };
@@ -436,14 +501,30 @@ const AIChatbot = () => {
         const response = await getDataValidationResponse(inputValue, messages, availableDatasets);
         console.log("Got AI response:", response.substring(0, 50) + "...");
         
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: response,
-          sender: 'assistant',
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
+        if (response === "SELECT_DATASET_FOR_VALIDATION") {
+          // Prompt user to select a dataset
+          const intent = lowerMessage.includes('validate') ? 'validate' : 'analyze';
+          setValidationIntent(intent);
+          
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: `Please select which dataset you would like to ${intent}:`,
+            sender: 'assistant',
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+          setShowDatasetSelector(true);
+        } else {
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: response,
+            sender: 'assistant',
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+        }
       }
     } catch (error) {
       console.error('Error getting AI response:', error);
@@ -531,114 +612,180 @@ const AIChatbot = () => {
   }
 
   return (
-    <Card className={`fixed bottom-6 right-6 shadow-lg w-80 sm:w-96 transition-all ${isMinimized ? 'h-14' : 'h-[500px] max-h-[80vh]'} z-50`}>
-      <CardHeader className="p-3 border-b flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-md flex items-center">
-          <FileText className="h-5 w-5 mr-2 text-blue-600" />
-          Data Validation Assistant
-        </CardTitle>
-        <div className="flex gap-1.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleMinimize}>
-            {isMinimized ? <Maximize className="h-4 w-4" /> : <Minimize className="h-4 w-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleChatbot}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      
-      {!isMinimized && (
-        <>
-          <CardContent className="p-0 h-[calc(100%-110px)]">
-            <ScrollArea className="h-full pt-4 px-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`mb-4 flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`flex max-w-[85%] ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                    <div className={`rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0 ${message.sender === 'user' ? 'ml-2 bg-blue-100 dark:bg-blue-900' : 'bg-gray-100 dark:bg-gray-800'}`}>
-                      {message.sender === 'user' ? (
-                        <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      ) : (
-                        <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                      )}
-                    </div>
-                    <div
-                      className={`py-2 px-3 rounded-lg ${
-                        message.sender === 'user'
-                          ? 'bg-blue-600 text-white dark:bg-blue-700'
-                          : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100'
-                      }`}
-                    >
-                      {renderMessage(message)}
-                      <p className="text-[10px] mt-1 opacity-70">
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+    <>
+      <Card className={`fixed bottom-6 right-6 shadow-lg w-80 sm:w-96 transition-all ${isMinimized ? 'h-14' : 'h-[500px] max-h-[80vh]'} z-50`}>
+        <CardHeader className="p-3 border-b flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-md flex items-center">
+            <FileText className="h-5 w-5 mr-2 text-blue-600" />
+            Data Validation Assistant
+          </CardTitle>
+          <div className="flex gap-1.5">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleMinimize}>
+              {isMinimized ? <Maximize className="h-4 w-4" /> : <Minimize className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleChatbot}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        
+        {!isMinimized && (
+          <>
+            <CardContent className="p-0 h-[calc(100%-110px)]">
+              <ScrollArea className="h-full pt-4 px-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`mb-4 flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`flex max-w-[85%] ${message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <div className={`rounded-full h-8 w-8 flex items-center justify-center mr-2 flex-shrink-0 ${message.sender === 'user' ? 'ml-2 bg-blue-100 dark:bg-blue-900' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                        {message.sender === 'user' ? (
+                          <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                        )}
+                      </div>
+                      <div
+                        className={`py-2 px-3 rounded-lg ${
+                          message.sender === 'user'
+                            ? 'bg-blue-600 text-white dark:bg-blue-700'
+                            : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100'
+                        }`}
+                      >
+                        {renderMessage(message)}
+                        <p className="text-[10px] mt-1 opacity-70">
+                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </ScrollArea>
-          </CardContent>
-          
-          <CardFooter className="p-3 pt-2 border-t">
-            <form onSubmit={handleSubmit} className="flex w-full space-x-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept=".csv,.json"
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={uploading}
-              />
-              
-              {showUpload && (
-                <Button
-                  type="button"
-                  size="icon"
-                  className="flex-shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
+                ))}
+                <div ref={messagesEndRef} />
+              </ScrollArea>
+            </CardContent>
+            
+            <CardFooter className="p-3 pt-2 border-t">
+              <form onSubmit={handleSubmit} className="flex w-full space-x-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".csv,.json"
+                  className="hidden"
+                  onChange={handleFileUpload}
                   disabled={uploading}
+                />
+                
+                {showUpload && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="flex-shrink-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <Loader className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+                
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  placeholder="Ask about data validation..."
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  disabled={isLoading || uploading}
+                  className="flex-1"
+                  autoComplete="off"
+                  tabIndex={0}
+                  aria-label="Chat input"
+                />
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  disabled={isLoading || uploading || !inputValue.trim()}
+                  tabIndex={0}
                 >
-                  {uploading ? (
-                    <Loader className="h-4 w-4 animate-spin" />
+                  {isLoading ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
                   ) : (
-                    <Upload className="h-4 w-4" />
+                    <Send className="h-4 w-4" />
                   )}
                 </Button>
-              )}
-              
-              <Input
-                ref={inputRef}
-                type="text"
-                placeholder="Ask about data validation..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                disabled={isLoading || uploading}
-                className="flex-1"
-                autoComplete="off"
-                tabIndex={0}
-                aria-label="Chat input"
-              />
-              <Button 
-                type="submit" 
-                size="icon" 
-                disabled={isLoading || uploading || !inputValue.trim()}
-                tabIndex={0}
+              </form>
+            </CardFooter>
+          </>
+        )}
+      </Card>
+      
+      {/* Dataset Selector Dialog */}
+      <Dialog 
+        open={showDatasetSelector} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowDatasetSelector(false);
+            setValidationIntent(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select a Dataset</DialogTitle>
+            <DialogDescription>
+              Choose which dataset you want to {validationIntent === 'analyze' ? 'analyze' : 'validate'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="max-h-[300px] overflow-y-auto">
+            {availableDatasets.map((dataset) => (
+              <Button
+                key={dataset.id}
+                variant="outline"
+                className="w-full mb-2 justify-start text-left flex items-center"
+                onClick={() => handleDatasetSelection(dataset.id)}
               >
-                {isLoading ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></div>
-                ) : (
-                  <Send className="h-4 w-4" />
+                <Database className="h-4 w-4 mr-2 text-blue-500" />
+                <div className="flex-1 overflow-hidden">
+                  <p className="font-medium truncate">{dataset.name}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {dataset.type} • {dataset.rowCount} rows • {dataset.columnCount} columns
+                  </p>
+                </div>
+                {selectedDatasetId === dataset.id && (
+                  <Check className="h-4 w-4 ml-2 text-green-500" />
                 )}
               </Button>
-            </form>
-          </CardFooter>
-        </>
-      )}
-    </Card>
+            ))}
+            
+            {availableDatasets.length === 0 && (
+              <div className="text-center py-6">
+                <p>No datasets available.</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-2"
+                  onClick={() => {
+                    setShowDatasetSelector(false);
+                    setShowUpload(true);
+                    setTimeout(() => {
+                      if (fileInputRef.current) {
+                        fileInputRef.current.click();
+                      }
+                    }, 300);
+                  }}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload a dataset
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

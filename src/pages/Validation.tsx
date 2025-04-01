@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -41,12 +40,17 @@ const Validation = () => {
 
   useEffect(() => {
     fetchDatasets();
+    
+    const storedDatasetId = sessionStorage.getItem('selectedDatasetId');
+    if (storedDatasetId) {
+      setSelectedDataset(storedDatasetId);
+      sessionStorage.removeItem('selectedDatasetId');
+    }
   }, []);
 
   const fetchDatasets = async () => {
     setLoading(true);
     try {
-      // Get datasets from all sources
       const fileDatasets = await getDatasets();
       const dbDatasets = await getImportedDatasets();
       
@@ -215,6 +219,16 @@ datasets:
   const validationDate = validationResults.length > 0 
     ? new Date(validationResults[0].timestamp)
     : null;
+
+  useEffect(() => {
+    if (selectedDataset && datasets.length > 0 && !isRunning && validationResults.length === 0) {
+      const fromChatbot = sessionStorage.getItem('fromChatbot');
+      if (fromChatbot) {
+        sessionStorage.removeItem('fromChatbot');
+        handleRunValidation();
+      }
+    }
+  }, [selectedDataset, datasets]);
 
   return (
     <div className="container mx-auto px-4 py-8">
