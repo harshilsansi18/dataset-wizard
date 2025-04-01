@@ -4,9 +4,9 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bot, Send, User, X, Minimize, Maximize, Database, FileText } from 'lucide-react';
+import { Bot, Send, User, X, Minimize, Maximize, Database, FileText, Upload, Loader } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { getDatasets, getDatasetById, DatasetType, runValidation } from '@/services/api';
+import { getDatasets, getDatasetById, DatasetType, runValidation, uploadDataset } from '@/services/api';
 import { useNavigate } from 'react-router-dom';
 
 type Message = {
@@ -234,7 +234,7 @@ const AIChatbot = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your data validation assistant. Ask me to analyze datasets, run validations, or download reports.",
+      content: "Hi! I'm your data validation assistant. I can help you analyze data quality, run validations, and upload datasets. Try commands like 'analyze my dataset', 'run validation', 'upload a dataset', or 'download reports'.",
       sender: 'assistant',
       timestamp: new Date()
     }
@@ -243,10 +243,13 @@ const AIChatbot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [availableDatasets, setAvailableDatasets] = useState<DatasetType[]>([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     console.log("Chatbot state: open=", isOpen, "minimized=", isMinimized);
@@ -291,6 +294,59 @@ const AIChatbot = () => {
     }
   }, [isOpen, isMinimized]);
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    setUploading(true);
+    
+    try {
+      const aiMessage: Message = {
+        id: Date.now().toString(),
+        content: `Uploading ${file.name}...`,
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
+      
+      const uploadedDataset = await uploadDataset(file);
+      
+      const successMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: `Successfully uploaded ${file.name}. The dataset has ${uploadedDataset.rowCount} rows and ${uploadedDataset.columnCount} columns. Would you like me to analyze it now?`,
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessage.id ? successMessage : msg
+      ));
+      
+      // Refresh the datasets list
+      await fetchDatasets();
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: `Failed to upload ${file.name}. Please try again or use a different file format (CSV or JSON are supported).`,
+        sender: 'assistant',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setUploading(false);
+      // Reset file input to allow uploading the same file again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setShowUpload(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -308,13 +364,32 @@ const AIChatbot = () => {
     setIsLoading(true);
     
     try {
-      console.log("Reloading datasets before analysis...");
+      console.log("Processing user message:", inputValue);
       await fetchDatasets();
       
       const lowerMessage = inputValue.toLowerCase();
       
+      // Handle upload request
+      if (lowerMessage.includes('upload') && (lowerMessage.includes('dataset') || lowerMessage.includes('file') || lowerMessage.includes('data'))) {
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: "Please select a file to upload (CSV or JSON format).",
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        setShowUpload(true);
+        
+        // Focus may be needed after a short delay
+        setTimeout(() => {
+          if (fileInputRef.current) {
+            fileInputRef.current.click();
+          }
+        }, 300);
+      }
       // Handle direct validation requests
-      if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
+      else if (lowerMessage.includes('run validation') || lowerMessage.includes('validate')) {
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: "I'll run a validation for you. Taking you to the validation page...",
@@ -334,6 +409,22 @@ const AIChatbot = () => {
         const aiMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: "You can download validation reports from the Reports page. Taking you there...",
+          sender: 'assistant',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        
+        // Add small delay before navigating to reports page
+        setTimeout(() => {
+          navigate('/reports');
+        }, 800);
+      }
+      // Handle local storage explanation
+      else if (lowerMessage.includes('postgres') && (lowerMessage.includes('store') || lowerMessage.includes('local') || lowerMessage.includes('share'))) {
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: "This application stores PostgreSQL connection information and imported datasets in your browser's localStorage. This means:\n\n1. Database credentials are stored only in your browser\n2. When running locally, your data stays on your device\n3. If you share the site URL, others won't see your datasets as localStorage is specific to each user's browser\n4. To share datasets with others, you would need to export and send them the files",
           sender: 'assistant',
           timestamp: new Date()
         };
@@ -494,13 +585,38 @@ const AIChatbot = () => {
           
           <CardFooter className="p-3 pt-2 border-t">
             <form onSubmit={handleSubmit} className="flex w-full space-x-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".csv,.json"
+                className="hidden"
+                onChange={handleFileUpload}
+                disabled={uploading}
+              />
+              
+              {showUpload && (
+                <Button
+                  type="button"
+                  size="icon"
+                  className="flex-shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <Loader className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
+              
               <Input
                 ref={inputRef}
                 type="text"
                 placeholder="Ask about data validation..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                disabled={isLoading}
+                disabled={isLoading || uploading}
                 className="flex-1"
                 autoComplete="off"
                 tabIndex={0}
@@ -509,7 +625,7 @@ const AIChatbot = () => {
               <Button 
                 type="submit" 
                 size="icon" 
-                disabled={isLoading || !inputValue.trim()}
+                disabled={isLoading || uploading || !inputValue.trim()}
                 tabIndex={0}
               >
                 {isLoading ? (

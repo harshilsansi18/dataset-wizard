@@ -11,7 +11,8 @@ import {
   postgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
-  refreshImportedDatasets
+  refreshImportedDatasets,
+  ensureImportedDatasetsAvailable
 } from './databaseService';
 
 // Re-export all service functions to streamline imports
@@ -37,7 +38,8 @@ export {
   postgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
-  refreshImportedDatasets
+  refreshImportedDatasets,
+  ensureImportedDatasetsAvailable
 };
 
 // Re-export types
