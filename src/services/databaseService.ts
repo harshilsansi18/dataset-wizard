@@ -1,14 +1,32 @@
-
 import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
+// Define a proper type for PostgreSQL config
+type PostgresConfig = {
+  host: string;
+  port: string;
+  database: string;
+  user: string;
+  password: string;
+  isConnected: boolean;
+  lastConnected: string | null;
+  isRealConnection: boolean;
+  connectionUrl: string;
+};
+
 // PostgreSQL connection configuration state
-export const postgresConfig = {
+export const postgresConfig: PostgresConfig = {
   host: "localhost",
   port: "5432",
   database: "",
   user: "",
   password: "",
+  isConnected: false,
+  lastConnected: null,
+  isRealConnection: false,
+  get connectionUrl() {
+    return `${this.host}:${this.port}/${this.database}`;
+  }
 };
 
 // Store imported datasets in-memory
@@ -40,12 +58,18 @@ export const initDatabaseConnection = (): void => {
   const useReal = shouldUseRealDatabaseConnection();
   console.log(`Database mode: ${useReal ? "Real connection" : "Mock connection"}`);
   
+  // Set the real connection flag
+  postgresConfig.isRealConnection = useReal;
+  
   // Clear any stored datasets when switching modes
   importedDatasets = [];
 };
 
 // Test connection to PostgreSQL database
-export const connectToDatabase = async (config = postgresConfig): Promise<boolean> => {
+export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<boolean> => {
+  // Update the config with any provided values
+  Object.assign(postgresConfig, config);
+  
   if (shouldUseRealDatabaseConnection()) {
     try {
       const response = await fetch(`${API_URL}/connect`, {
@@ -53,7 +77,13 @@ export const connectToDatabase = async (config = postgresConfig): Promise<boolea
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify({
+          host: postgresConfig.host,
+          port: parseInt(postgresConfig.port, 10),
+          database: postgresConfig.database,
+          user: postgresConfig.user,
+          password: postgresConfig.password
+        }),
       });
       
       if (!response.ok) {
@@ -62,6 +92,8 @@ export const connectToDatabase = async (config = postgresConfig): Promise<boolea
       }
       
       const result = await response.json();
+      postgresConfig.isConnected = result.success;
+      postgresConfig.lastConnected = new Date().toISOString();
       return result.success;
     } catch (error) {
       console.error("Database connection error:", error);
@@ -70,6 +102,8 @@ export const connectToDatabase = async (config = postgresConfig): Promise<boolea
   } else {
     // Mock connection logic (always succeeds after delay)
     await new Promise(resolve => setTimeout(resolve, 800));
+    postgresConfig.isConnected = true;
+    postgresConfig.lastConnected = new Date().toISOString();
     return true;
   }
 };
@@ -77,6 +111,7 @@ export const connectToDatabase = async (config = postgresConfig): Promise<boolea
 // Disconnect from database
 export const disconnectDatabase = async (): Promise<void> => {
   // In a real implementation, you might want to close connections
+  postgresConfig.isConnected = false;
   importedDatasets = [];
 };
 
@@ -136,7 +171,11 @@ export const importTableAsDataset = async (
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...config,
+          host: config.host,
+          port: parseInt(config.port, 10),
+          database: config.database,
+          user: config.user,
+          password: config.password,
           table: tableName
         }),
       });
@@ -261,35 +300,9 @@ export const getImportedDatasets = (): DatasetType[] => {
 };
 
 // Function to refresh the list of imported datasets
-export const refreshImportedDatasets = async (
-  config = postgresConfig
-): Promise<DatasetType[]> => {
-  if (shouldUseRealDatabaseConnection()) {
-    try {
-      const tables = await getDatabaseTables(config);
-      
-      // Import all tables (could be optimized to only import new/changed tables)
-      importedDatasets = [];
-      for (const table of tables) {
-        const dataset = await importTableAsDataset(table, config);
-        importedDatasets.push(dataset);
-      }
-      
-      return [...importedDatasets];
-    } catch (error) {
-      console.error("Error refreshing datasets:", error);
-      throw error;
-    }
-  } else {
-    // For mock mode, just return existing datasets or generate new ones if none
-    if (importedDatasets.length === 0) {
-      importedDatasets = await Promise.all([
-        importTableAsDataset("customers", config),
-        importTableAsDataset("orders", config)
-      ]);
-    }
-    return [...importedDatasets];
-  }
+export const refreshImportedDatasets = (): DatasetType[] => {
+  // Immediately return the current datasets (no async operation)
+  return [...importedDatasets];
 };
 
 // Ensure datasets are available (lazy load)
@@ -297,7 +310,17 @@ export const ensureImportedDatasetsAvailable = async (
   config = postgresConfig
 ): Promise<DatasetType[]> => {
   if (importedDatasets.length === 0) {
-    return refreshImportedDatasets(config);
+    try {
+      const tables = await getDatabaseTables(config);
+      
+      // Import first table as sample if we're using mock connection
+      if (!shouldUseRealDatabaseConnection() && tables.length > 0) {
+        await importTableAsDataset(tables[0], config);
+      }
+      
+    } catch (error) {
+      console.error("Error ensuring datasets:", error);
+    }
   }
   return [...importedDatasets];
 };
@@ -305,4 +328,7 @@ export const ensureImportedDatasetsAvailable = async (
 // Clear database data
 export const clearDatabaseData = (): void => {
   importedDatasets = [];
+  postgresConfig.isConnected = false;
+  postgresConfig.lastConnected = null;
+  postgresConfig.isRealConnection = false;
 };

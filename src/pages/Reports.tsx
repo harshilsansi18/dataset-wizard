@@ -19,7 +19,7 @@ import {
 import { 
   getAllValidationResults, 
   getDatasets, 
-  refreshImportedDatasets, 
+  getImportedDatasets, 
   DatasetType, 
   ValidationResult 
 } from "@/services/api";
@@ -63,7 +63,7 @@ const Reports = () => {
       ]);
       
       // Ensure imported database datasets are included
-      const importedDatasets = refreshImportedDatasets();
+      const importedDatasets = getImportedDatasets();
       const allDatasets = [...datasetsData];
       
       // Add any database datasets that might be missing
