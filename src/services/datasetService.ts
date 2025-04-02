@@ -1,4 +1,3 @@
-
 import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
@@ -6,6 +5,8 @@ import { getImportedDatasets } from "./databaseService";
 
 // Persistent storage using localStorage
 const DATASETS_STORAGE_KEY = "soda_core_datasets";
+// Add a separate storage key for public datasets
+const PUBLIC_DATASETS_STORAGE_KEY = "soda_core_public_datasets";
 
 // Initialize store from localStorage or create empty objects
 const initializeStore = () => {
@@ -18,8 +19,21 @@ const initializeStore = () => {
   }
 };
 
+// Initialize public datasets store
+const initializePublicStore = () => {
+  try {
+    const storedData = localStorage.getItem(PUBLIC_DATASETS_STORAGE_KEY);
+    return storedData ? JSON.parse(storedData) : {};
+  } catch (error) {
+    console.error(`Error initializing store for public datasets:`, error);
+    return {};
+  }
+};
+
 // Store datasets
 let datasetsStore: { [key: string]: DatasetType } = initializeStore();
+// Store for public datasets (shared across users)
+let publicDatasetsStore: { [key: string]: DatasetType } = initializePublicStore();
 
 // Save store to localStorage
 const saveToStorage = (data: any) => {
@@ -30,6 +44,20 @@ const saveToStorage = (data: any) => {
     toast({
       title: "Storage Error",
       description: "Failed to save data locally. Your browser storage might be full.",
+      variant: "destructive",
+    });
+  }
+};
+
+// Save public datasets to localStorage
+const savePublicToStorage = (data: any) => {
+  try {
+    localStorage.setItem(PUBLIC_DATASETS_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error saving to ${PUBLIC_DATASETS_STORAGE_KEY}:`, error);
+    toast({
+      title: "Storage Error",
+      description: "Failed to save public data. Your browser storage might be full.",
       variant: "destructive",
     });
   }
@@ -54,20 +82,86 @@ export const getDatasets = (): Promise<DatasetType[]> => {
   });
 };
 
-// Get public datasets only
+// Get public datasets only - now fetches from both local and public storage
 export const getPublicDatasets = (): Promise<DatasetType[]> => {
   return new Promise((resolve) => {
-    // Get all datasets and filter for public ones
+    // Get all public datasets from the public store
+    const publicDatasets = Object.values(publicDatasetsStore);
+    
+    // Get all datasets and filter for public ones in the user's own store
     getDatasets().then(datasets => {
-      const publicDatasets = datasets.filter(dataset => dataset.isPublic === true);
-      resolve(publicDatasets);
+      // Get only public datasets from user's personal store
+      const userPublicDatasets = datasets.filter(dataset => dataset.isPublic === true);
+      
+      // Combine all public datasets
+      const allPublicDatasets = [...publicDatasets, ...userPublicDatasets];
+      
+      // Remove duplicates
+      const uniquePublicDatasets = allPublicDatasets.filter((dataset, index, self) => 
+        index === self.findIndex((d) => d.id === dataset.id)
+      );
+      
+      resolve(uniquePublicDatasets);
     });
   });
 };
 
 // Toggle dataset public status
 export const toggleDatasetPublicStatus = (id: string, isPublic: boolean): Promise<DatasetType | undefined> => {
-  return updateDataset(id, { isPublic });
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      // Check if dataset exists in user's own store
+      if (datasetsStore[id]) {
+        // Update the dataset in the user's store
+        datasetsStore[id] = {
+          ...datasetsStore[id],
+          isPublic,
+          lastUpdated: new Date().toISOString().split('T')[0]
+        };
+        saveToStorage(datasetsStore);
+        
+        // If making it public, also add to the public store
+        if (isPublic) {
+          publicDatasetsStore[id] = datasetsStore[id];
+          savePublicToStorage(publicDatasetsStore);
+        } else {
+          // If making it private, remove from public store
+          if (publicDatasetsStore[id]) {
+            delete publicDatasetsStore[id];
+            savePublicToStorage(publicDatasetsStore);
+          }
+        }
+        
+        resolve(datasetsStore[id]);
+      } else {
+        // If the dataset doesn't exist in the user's store, check the public store
+        const dbDatasets = getImportedDatasets();
+        const dbDataset = dbDatasets.find(ds => ds.id === id);
+        
+        if (dbDataset) {
+          // Update the database dataset's public status
+          dbDataset.isPublic = isPublic;
+          
+          // If making public, add to public store
+          if (isPublic) {
+            publicDatasetsStore[id] = dbDataset;
+            savePublicToStorage(publicDatasetsStore);
+          } else {
+            // If making private, remove from public store
+            if (publicDatasetsStore[id]) {
+              delete publicDatasetsStore[id];
+              savePublicToStorage(publicDatasetsStore);
+            }
+          }
+          
+          resolve(dbDataset);
+        } else {
+          // Dataset not found
+          reject(new Error("Dataset not found"));
+        }
+      }
+    }, 500);
+  });
 };
 
 export const getDatasetById = (id: string): Promise<DatasetType | undefined> => {
@@ -249,8 +343,16 @@ export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
         lastUpdated: new Date().toISOString().split('T')[0],
         isPublic: dataset.isPublic || false
       };
+      
       datasetsStore[id] = newDataset;
       saveToStorage(datasetsStore);
+      
+      // If dataset is public, also add to public store
+      if (newDataset.isPublic) {
+        publicDatasetsStore[id] = newDataset;
+        savePublicToStorage(publicDatasetsStore);
+      }
+      
       resolve(newDataset);
     }, 500);
   });
@@ -263,13 +365,35 @@ export const updateDataset = (
   return new Promise((resolve) => {
     setTimeout(() => {
       if (datasetsStore[id]) {
-        datasetsStore[id] = { 
+        const updatedDataset = { 
           ...datasetsStore[id], 
           ...updates,
           lastUpdated: new Date().toISOString().split('T')[0]
         };
+        
+        datasetsStore[id] = updatedDataset;
         saveToStorage(datasetsStore);
-        resolve(datasetsStore[id]);
+        
+        // Handle public status updates
+        if (updates.isPublic !== undefined) {
+          if (updates.isPublic) {
+            // If making public, add to public store
+            publicDatasetsStore[id] = updatedDataset;
+            savePublicToStorage(publicDatasetsStore);
+          } else {
+            // If making private, remove from public store
+            if (publicDatasetsStore[id]) {
+              delete publicDatasetsStore[id];
+              savePublicToStorage(publicDatasetsStore);
+            }
+          }
+        } else if (updatedDataset.isPublic) {
+          // If dataset is already public, update it in the public store too
+          publicDatasetsStore[id] = updatedDataset;
+          savePublicToStorage(publicDatasetsStore);
+        }
+        
+        resolve(updatedDataset);
       } else {
         resolve(undefined);
       }
@@ -281,8 +405,16 @@ export const deleteDataset = (id: string): Promise<boolean> => {
   return new Promise((resolve) => {
     setTimeout(() => {
       if (datasetsStore[id]) {
+        // Delete from user's store
         delete datasetsStore[id];
         saveToStorage(datasetsStore);
+        
+        // Also delete from public store if it exists there
+        if (publicDatasetsStore[id]) {
+          delete publicDatasetsStore[id];
+          savePublicToStorage(publicDatasetsStore);
+        }
+        
         resolve(true);
       } else {
         resolve(false);
