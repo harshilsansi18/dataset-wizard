@@ -12,7 +12,8 @@ import {
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
-  ensureImportedDatasetsAvailable
+  ensureImportedDatasetsAvailable,
+  clearDatabaseData
 } from './databaseService';
 
 // Re-export all service functions to streamline imports
@@ -39,7 +40,8 @@ export {
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
-  ensureImportedDatasetsAvailable
+  ensureImportedDatasetsAvailable,
+  clearDatabaseData
 };
 
 // Re-export types

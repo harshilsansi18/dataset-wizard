@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Database, Server, Table, Download, Loader2, Clock, RefreshCw } from "lucide-react";
+import { Database, Server, Table, Download, Loader2, Clock, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { 
   connectToDatabase, 
@@ -14,7 +14,8 @@ import {
   importTableAsDataset, 
   disconnectDatabase, 
   postgresConfig,
-  initDatabaseConnection
+  initDatabaseConnection,
+  clearDatabaseData
 } from "@/services/api";
 
 const formatTimeSince = (isoString: string | null): string => {
@@ -46,6 +47,7 @@ const DatabaseConnection = () => {
   const [isLoadingTables, setIsLoadingTables] = useState(false);
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [lastConnected, setLastConnected] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Initialize connection from localStorage on component mount
   useEffect(() => {
@@ -142,6 +144,16 @@ const DatabaseConnection = () => {
     setTables([]);
     setLastConnected(null);
   };
+  
+  const handleClearData = () => {
+    setIsResetting(true);
+    setTimeout(() => {
+      clearDatabaseData();
+      setTables([]);
+      setLastConnected(null);
+      setIsResetting(false);
+    }, 500); // Small delay for better UX
+  };
 
   return (
     <Card className="w-full">
@@ -224,6 +236,27 @@ const DatabaseConnection = () => {
                 </>
               )}
             </Button>
+            
+            <Separator className="my-4" />
+            
+            <div className="text-center">
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={handleClearData}
+                disabled={isResetting}
+              >
+                {isResetting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Reset All Database Data
+              </Button>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Clear all database connections and imported datasets from local storage
+              </p>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -271,6 +304,19 @@ const DatabaseConnection = () => {
                     onClick={handleDisconnect}
                   >
                     Disconnect
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleClearData}
+                    disabled={isResetting}
+                  >
+                    {isResetting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    Reset All Data
                   </Button>
                 </div>
               </div>

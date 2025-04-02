@@ -1,4 +1,3 @@
-
 import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
@@ -266,4 +265,38 @@ export const disconnectDatabase = (): void => {
     title: "Database Disconnected",
     description: "Successfully disconnected from the database",
   });
+};
+
+// New function to completely clear all database data
+export const clearDatabaseData = (): void => {
+  // Reset postgres config
+  postgresConfig.isConnected = false;
+  postgresConfig.connectionUrl = "";
+  postgresConfig.user = "";
+  postgresConfig.password = "";
+  postgresConfig.database = "";
+  postgresConfig.host = "";
+  postgresConfig.port = 5432;
+  postgresConfig.lastConnected = null;
+  postgresConfig.importedDatasets = [];
+  
+  // Clear from localStorage
+  try {
+    localStorage.removeItem('postgres_connection');
+    localStorage.removeItem('db_imported_datasets');
+    console.log('All database data cleared successfully');
+    
+    toast({
+      title: "Database Data Cleared",
+      description: "All database connection information and imported datasets have been deleted",
+    });
+  } catch (err) {
+    console.error('Failed to clear database data from localStorage:', err);
+    
+    toast({
+      title: "Error",
+      description: "Failed to clear database data",
+      variant: "destructive"
+    });
+  }
 };

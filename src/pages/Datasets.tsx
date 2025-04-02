@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { 
   UploadCloud, 
@@ -42,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { getDatasets, downloadDataset, deleteDataset, DatasetType } from "@/services/api";
 import DatabaseConnection from "@/components/database/DatabaseConnection";
+import PublicDatasets from "@/components/datasets/PublicDatasets";
 
 const Datasets = () => {
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
@@ -73,7 +73,6 @@ const Datasets = () => {
 
   const handleDownload = async (id: string, name: string) => {
     try {
-      // Find the dataset object by id first
       const dataset = datasets.find(d => d.id === id);
       if (!dataset) {
         throw new Error("Dataset not found");
@@ -118,8 +117,6 @@ const Datasets = () => {
 
     setIsUploading(true);
     try {
-      // In a real app, this would upload the file to your backend
-      // For now, we'll simulate an upload delay
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       toast({
@@ -127,7 +124,6 @@ const Datasets = () => {
         description: `${files[0].name} has been uploaded as a new dataset.`
       });
       
-      // Refresh datasets after upload
       fetchDatasets();
     } catch (error) {
       console.error("Upload error:", error);
@@ -138,7 +134,6 @@ const Datasets = () => {
       });
     } finally {
       setIsUploading(false);
-      // Reset file input
       event.target.value = "";
     }
   };
@@ -182,6 +177,7 @@ const Datasets = () => {
             <TabsTrigger value="CSV">CSV</TabsTrigger>
             <TabsTrigger value="JSON">JSON</TabsTrigger>
             <TabsTrigger value="Database">Database</TabsTrigger>
+            <TabsTrigger value="public">Public</TabsTrigger>
           </TabsList>
           
           <div className="flex space-x-2">
@@ -315,8 +311,11 @@ const Datasets = () => {
         <TabsContent value="Database">
           <DatabaseConnection />
         </TabsContent>
+        
+        <TabsContent value="public">
+          <PublicDatasets />
+        </TabsContent>
 
-        {/* Reuse the same card for other tabs */}
         <TabsContent value="CSV" className="space-y-4">
           <Card>
             <CardContent className="p-0">
