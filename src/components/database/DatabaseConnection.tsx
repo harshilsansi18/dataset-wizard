@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,11 +50,9 @@ const DatabaseConnection = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [useRealConnection, setUseRealConnection] = useState(false);
 
-  // Initialize connection from localStorage on component mount
   useEffect(() => {
     initDatabaseConnection();
     
-    // Set form values if we have a connection
     if (postgresConfig.isConnected) {
       setHost(postgresConfig.host);
       setPort(postgresConfig.port.toString());
@@ -64,7 +61,6 @@ const DatabaseConnection = () => {
       setLastConnected(postgresConfig.lastConnected);
       setUseRealConnection(postgresConfig.isRealConnection);
       
-      // Load tables if we're connected
       handleGetTables();
     }
   }, []);
@@ -83,16 +79,14 @@ const DatabaseConnection = () => {
     try {
       await connectToDatabase({
         host,
-        port: parseInt(port, 10),
+        port,
         database,
         user,
-        password,
-        useRealConnection
+        password
       });
       
       setLastConnected(postgresConfig.lastConnected);
       
-      // After successful connection, load tables
       handleGetTables();
     } catch (error) {
       console.error("Connection error:", error);
@@ -158,7 +152,7 @@ const DatabaseConnection = () => {
       setLastConnected(null);
       setUseRealConnection(false);
       setIsResetting(false);
-    }, 500); // Small delay for better UX
+    }, 500);
   };
 
   return (
