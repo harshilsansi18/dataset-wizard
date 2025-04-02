@@ -1,73 +1,39 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, Database, Download, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Database, Download, Loader2, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { DatasetType, downloadDataset } from "@/services/api";
-
-// These are example public datasets that will be visible to all users
-const SAMPLE_PUBLIC_DATASETS: DatasetType[] = [
-  {
-    id: "public_ds_1",
-    name: "US Population Data",
-    type: "CSV",
-    columnCount: 8,
-    rowCount: 50,
-    dateUploaded: "2023-08-10",
-    status: "Validated",
-    size: "25 KB",
-    lastUpdated: "2023-08-10",
-    headers: ["State", "Population", "Area", "Density", "Growth", "GDP", "Income", "Region"],
-    content: [
-      { State: "California", Population: "39.5M", Area: "163,696 sq mi", Density: "241/sq mi", Growth: "0.6%", GDP: "$3.4T", Income: "$70,192", Region: "West" },
-      { State: "Texas", Population: "29.9M", Area: "268,596 sq mi", Density: "111/sq mi", Growth: "1.3%", GDP: "$1.9T", Income: "$61,874", Region: "South" },
-      // More rows would be included in a real dataset
-    ],
-    source: { type: "file", fileName: "us_population.csv" }
-  },
-  {
-    id: "public_ds_2",
-    name: "Global Weather Data",
-    type: "CSV",
-    columnCount: 7,
-    rowCount: 100,
-    dateUploaded: "2023-07-15",
-    status: "Validated",
-    size: "42 KB",
-    lastUpdated: "2023-07-15",
-    headers: ["City", "Country", "Temperature", "Humidity", "Precipitation", "WindSpeed", "AirQuality"],
-    content: [
-      { City: "New York", Country: "USA", Temperature: "75°F", Humidity: "65%", Precipitation: "0.2 in", WindSpeed: "8 mph", AirQuality: "Good" },
-      { City: "London", Country: "UK", Temperature: "68°F", Humidity: "78%", Precipitation: "0.5 in", WindSpeed: "12 mph", AirQuality: "Moderate" },
-      // More rows would be included in a real dataset
-    ],
-    source: { type: "file", fileName: "global_weather.csv" }
-  },
-  {
-    id: "public_ds_3",
-    name: "Sales Transactions",
-    type: "CSV",
-    columnCount: 6,
-    rowCount: 200,
-    dateUploaded: "2023-06-20",
-    status: "Validated",
-    size: "58 KB",
-    lastUpdated: "2023-06-20",
-    headers: ["TransactionID", "Date", "Product", "Quantity", "Price", "Customer"],
-    content: [
-      { TransactionID: "T-1001", Date: "2023-06-01", Product: "Laptop", Quantity: "1", Price: "$999", Customer: "John Smith" },
-      { TransactionID: "T-1002", Date: "2023-06-01", Product: "Monitor", Quantity: "2", Price: "$349", Customer: "Jane Doe" },
-      // More rows would be included in a real dataset
-    ],
-    source: { type: "file", fileName: "sales_transactions.csv" }
-  }
-];
+import { DatasetType, downloadDataset, getPublicDatasets } from "@/services/api";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PublicDatasets = () => {
+  const [publicDatasets, setPublicDatasets] = useState<DatasetType[]>([]);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPublicDatasets();
+  }, []);
+
+  const fetchPublicDatasets = async () => {
+    setIsLoading(true);
+    try {
+      const datasets = await getPublicDatasets();
+      setPublicDatasets(datasets);
+    } catch (error) {
+      console.error("Error fetching public datasets:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load public datasets",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDownload = async (dataset: DatasetType) => {
     setIsDownloading(dataset.id);
@@ -97,51 +63,74 @@ const PublicDatasets = () => {
           Public Datasets
         </CardTitle>
         <CardDescription>
-          Example datasets available to all users
+          Datasets that have been shared for public access
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Rows</TableHead>
-              <TableHead>Columns</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {SAMPLE_PUBLIC_DATASETS.map((dataset) => (
-              <TableRow key={dataset.id}>
-                <TableCell className="font-medium">{dataset.name}</TableCell>
-                <TableCell>
-                  <div className="flex items-center">
-                    <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
-                    <Badge variant="outline">{dataset.type}</Badge>
-                  </div>
-                </TableCell>
-                <TableCell>{dataset.rowCount}</TableCell>
-                <TableCell>{dataset.columnCount}</TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(dataset)}
-                    disabled={isDownloading === dataset.id}
-                  >
-                    {isDownloading === dataset.id ? (
-                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                    ) : (
-                      <Download className="mr-2 h-3 w-3" />
-                    )}
-                    Download
-                  </Button>
-                </TableCell>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-32">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+          </div>
+        ) : publicDatasets.length === 0 ? (
+          <div className="p-6 flex flex-col items-center justify-center text-center">
+            <Info className="h-12 w-12 text-slate-300 mb-2" />
+            <h3 className="text-lg font-medium mb-1">No public datasets available</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Public datasets will appear here when users mark datasets as public.
+            </p>
+            <p className="text-xs text-slate-400">
+              To make your datasets public, go to the Datasets tab and toggle the "Public" option.
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Rows</TableHead>
+                <TableHead>Columns</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {publicDatasets.map((dataset) => (
+                <TableRow key={dataset.id}>
+                  <TableCell className="font-medium">{dataset.name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center">
+                      {dataset.type === "CSV" ? (
+                        <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
+                      ) : dataset.type === "JSON" ? (
+                        <FileSpreadsheet className="mr-2 h-4 w-4 text-yellow-500" />
+                      ) : (
+                        <Database className="mr-2 h-4 w-4 text-blue-500" />
+                      )}
+                      <Badge variant="outline">{dataset.type}</Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>{dataset.rowCount}</TableCell>
+                  <TableCell>{dataset.columnCount}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownload(dataset)}
+                      disabled={isDownloading === dataset.id}
+                    >
+                      {isDownloading === dataset.id ? (
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-3 w-3" />
+                      )}
+                      Download
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   );

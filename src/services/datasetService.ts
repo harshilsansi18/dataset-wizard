@@ -1,3 +1,4 @@
+
 import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
@@ -51,6 +52,22 @@ export const getDatasets = (): Promise<DatasetType[]> => {
     
     resolve(uniqueDatasets);
   });
+};
+
+// Get public datasets only
+export const getPublicDatasets = (): Promise<DatasetType[]> => {
+  return new Promise((resolve) => {
+    // Get all datasets and filter for public ones
+    getDatasets().then(datasets => {
+      const publicDatasets = datasets.filter(dataset => dataset.isPublic === true);
+      resolve(publicDatasets);
+    });
+  });
+};
+
+// Toggle dataset public status
+export const toggleDatasetPublicStatus = (id: string, isPublic: boolean): Promise<DatasetType | undefined> => {
+  return updateDataset(id, { isPublic });
 };
 
 export const getDatasetById = (id: string): Promise<DatasetType | undefined> => {
@@ -145,7 +162,8 @@ export const uploadDataset = (file: File): Promise<DatasetType> => {
         source: {
           type: "file",
           fileName: file.name
-        }
+        },
+        isPublic: false // Default to not public
       };
       
       // Save to store and persist
@@ -228,7 +246,8 @@ export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
         ...dataset, 
         id,
         status: "Not Validated",
-        lastUpdated: new Date().toISOString().split('T')[0]
+        lastUpdated: new Date().toISOString().split('T')[0],
+        isPublic: dataset.isPublic || false
       };
       datasetsStore[id] = newDataset;
       saveToStorage(datasetsStore);

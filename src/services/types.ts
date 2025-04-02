@@ -18,6 +18,7 @@ export type DatasetType = {
     fileName?: string;
     apiEndpoint?: string;
   };
+  isPublic?: boolean; // New field to indicate if dataset is public
 };
 
 export type ValidationResult = {

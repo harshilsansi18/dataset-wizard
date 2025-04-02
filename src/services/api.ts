@@ -1,6 +1,6 @@
 
 // Import required services
-import { getDatasets, getDatasetById, uploadDataset, deleteDataset, downloadDataset, createDataset, updateDataset } from './datasetService';
+import { getDatasets, getDatasetById, uploadDataset, deleteDataset, downloadDataset, createDataset, updateDataset, getPublicDatasets, toggleDatasetPublicStatus } from './datasetService';
 import { runValidation, getAllValidationResults } from './validationService';
 import { compareDatasetsByIds, getAllComparisonResults, getComparisonResultById, getComparisonHistory } from './comparisonService';
 import { 
@@ -25,6 +25,8 @@ export {
   downloadDataset,
   createDataset,
   updateDataset,
+  getPublicDatasets,
+  toggleDatasetPublicStatus,
   runValidation,
   getAllValidationResults,
   compareDatasetsByIds as compareDatasets,

@@ -8,7 +8,9 @@ import {
   Download, 
   Trash2, 
   ChevronDown,
-  Loader2
+  Loader2,
+  Globe,
+  Lock
 } from "lucide-react";
 import { 
   Card, 
@@ -39,7 +41,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { getDatasets, downloadDataset, deleteDataset, DatasetType } from "@/services/api";
+import { Switch } from "@/components/ui/switch";
+import { getDatasets, downloadDataset, deleteDataset, DatasetType, toggleDatasetPublicStatus } from "@/services/api";
 import DatabaseConnection from "@/components/database/DatabaseConnection";
 import PublicDatasets from "@/components/datasets/PublicDatasets";
 
@@ -49,6 +52,7 @@ const Datasets = () => {
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [updatingPublicStatus, setUpdatingPublicStatus] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDatasets();
@@ -111,6 +115,35 @@ const Datasets = () => {
     }
   };
 
+  const handleTogglePublic = async (id: string, isPublic: boolean) => {
+    setUpdatingPublicStatus(id);
+    try {
+      const updatedDataset = await toggleDatasetPublicStatus(id, isPublic);
+      if (updatedDataset) {
+        setDatasets(
+          datasets.map((dataset) =>
+            dataset.id === id ? { ...dataset, isPublic } : dataset
+          )
+        );
+        toast({
+          title: isPublic ? "Dataset Made Public" : "Dataset Made Private",
+          description: isPublic 
+            ? "The dataset is now accessible to everyone" 
+            : "The dataset is now private"
+        });
+      }
+    } catch (error) {
+      console.error("Error updating public status:", error);
+      toast({
+        title: "Update Failed",
+        description: "Failed to update dataset visibility",
+        variant: "destructive"
+      });
+    } finally {
+      setUpdatingPublicStatus(null);
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -145,16 +178,123 @@ const Datasets = () => {
   });
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "valid":
+    switch (status?.toLowerCase()) {
+      case "validated":
         return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-      case "invalid":
+      case "issues found":
         return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       case "not validated":
         return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400";
       default:
         return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
     }
+  };
+
+  const renderDatasetsTable = (datasets: DatasetType[]) => {
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        </div>
+      );
+    }
+    
+    if (datasets.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12">
+          <FileSpreadsheet className="mb-4 h-12 w-12 text-slate-300" />
+          <h3 className="text-lg font-medium">No datasets found</h3>
+          <p className="text-sm text-slate-500">
+            Upload a dataset or import from a database to get started
+          </p>
+        </div>
+      );
+    }
+    
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Size</TableHead>
+            <TableHead>Date Uploaded</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Public</TableHead>
+            <TableHead>Rows</TableHead>
+            <TableHead>Columns</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {datasets.map((dataset) => (
+            <TableRow key={dataset.id}>
+              <TableCell className="font-medium">{dataset.name}</TableCell>
+              <TableCell>
+                <div className="flex items-center">
+                  {dataset.type === "CSV" ? (
+                    <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
+                  ) : dataset.type === "JSON" ? (
+                    <FileSpreadsheet className="mr-2 h-4 w-4 text-yellow-500" />
+                  ) : (
+                    <Database className="mr-2 h-4 w-4 text-blue-500" />
+                  )}
+                  {dataset.type}
+                </div>
+              </TableCell>
+              <TableCell>{dataset.size}</TableCell>
+              <TableCell>{dataset.dateUploaded}</TableCell>
+              <TableCell>
+                <Badge className={getStatusColor(dataset.status || "")}>
+                  {dataset.status || "Not Validated"}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center">
+                  <Switch 
+                    checked={dataset.isPublic || false}
+                    onCheckedChange={(checked) => handleTogglePublic(dataset.id, checked)}
+                    disabled={updatingPublicStatus === dataset.id}
+                    className="mr-2"
+                  />
+                  {updatingPublicStatus === dataset.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : dataset.isPublic ? (
+                    <Globe className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Lock className="h-4 w-4 text-slate-400" />
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>{dataset.rowCount}</TableCell>
+              <TableCell>{dataset.columnCount}</TableCell>
+              <TableCell className="text-right">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <ChevronDown className="h-4 w-4" />
+                      <span className="sr-only">Open menu</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleDownload(dataset.id, dataset.name)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDelete(dataset.id, dataset.name)}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
   };
 
   return (
@@ -226,84 +366,7 @@ const Datasets = () => {
         <TabsContent value="all" className="space-y-4">
           <Card>
             <CardContent className="p-0">
-              {loading ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-              ) : filteredDatasets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <FileSpreadsheet className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium">No datasets found</h3>
-                  <p className="text-sm text-slate-500">
-                    Upload a dataset or import from a database to get started
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Date Uploaded</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Rows</TableHead>
-                      <TableHead>Columns</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDatasets.map((dataset) => (
-                      <TableRow key={dataset.id}>
-                        <TableCell className="font-medium">{dataset.name}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            {dataset.type === "CSV" ? (
-                              <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
-                            ) : dataset.type === "JSON" ? (
-                              <FileSpreadsheet className="mr-2 h-4 w-4 text-yellow-500" />
-                            ) : (
-                              <Database className="mr-2 h-4 w-4 text-blue-500" />
-                            )}
-                            {dataset.type}
-                          </div>
-                        </TableCell>
-                        <TableCell>{dataset.size}</TableCell>
-                        <TableCell>{dataset.dateUploaded}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(dataset.status)}>
-                            {dataset.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{dataset.rowCount}</TableCell>
-                        <TableCell>{dataset.columnCount}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <ChevronDown className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleDownload(dataset.id, dataset.name)}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDelete(dataset.id, dataset.name)}>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              {renderDatasetsTable(filteredDatasets)}
             </CardContent>
           </Card>
         </TabsContent>
@@ -319,78 +382,7 @@ const Datasets = () => {
         <TabsContent value="CSV" className="space-y-4">
           <Card>
             <CardContent className="p-0">
-              {loading ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-              ) : filteredDatasets.filter(dataset => dataset.type === "CSV").length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <FileSpreadsheet className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium">No CSV datasets found</h3>
-                  <p className="text-sm text-slate-500">
-                    Upload a CSV dataset or import from a database to get started
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Date Uploaded</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Rows</TableHead>
-                      <TableHead>Columns</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDatasets.filter(dataset => dataset.type === "CSV").map((dataset) => (
-                      <TableRow key={dataset.id}>
-                        <TableCell className="font-medium">{dataset.name}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <FileSpreadsheet className="mr-2 h-4 w-4 text-green-500" />
-                            {dataset.type}
-                          </div>
-                        </TableCell>
-                        <TableCell>{dataset.size}</TableCell>
-                        <TableCell>{dataset.dateUploaded}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(dataset.status)}>
-                            {dataset.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{dataset.rowCount}</TableCell>
-                        <TableCell>{dataset.columnCount}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <ChevronDown className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleDownload(dataset.id, dataset.name)}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDelete(dataset.id, dataset.name)}>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              {renderDatasetsTable(filteredDatasets.filter(dataset => dataset.type === "CSV"))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -398,78 +390,7 @@ const Datasets = () => {
         <TabsContent value="JSON" className="space-y-4">
           <Card>
             <CardContent className="p-0">
-              {loading ? (
-                <div className="flex justify-center items-center h-64">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-              ) : filteredDatasets.filter(dataset => dataset.type === "JSON").length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <FileSpreadsheet className="mb-4 h-12 w-12 text-slate-300" />
-                  <h3 className="text-lg font-medium">No JSON datasets found</h3>
-                  <p className="text-sm text-slate-500">
-                    Upload a JSON dataset or import from a database to get started
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Date Uploaded</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Rows</TableHead>
-                      <TableHead>Columns</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDatasets.filter(dataset => dataset.type === "JSON").map((dataset) => (
-                      <TableRow key={dataset.id}>
-                        <TableCell className="font-medium">{dataset.name}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <FileSpreadsheet className="mr-2 h-4 w-4 text-yellow-500" />
-                            {dataset.type}
-                          </div>
-                        </TableCell>
-                        <TableCell>{dataset.size}</TableCell>
-                        <TableCell>{dataset.dateUploaded}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(dataset.status)}>
-                            {dataset.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{dataset.rowCount}</TableCell>
-                        <TableCell>{dataset.columnCount}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <ChevronDown className="h-4 w-4" />
-                                <span className="sr-only">Open menu</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleDownload(dataset.id, dataset.name)}>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleDelete(dataset.id, dataset.name)}>
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+              {renderDatasetsTable(filteredDatasets.filter(dataset => dataset.type === "JSON"))}
             </CardContent>
           </Card>
         </TabsContent>
