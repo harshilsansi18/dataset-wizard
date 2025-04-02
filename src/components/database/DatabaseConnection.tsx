@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Database, Server, Table, Download, Loader2, Clock, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { 
@@ -48,6 +49,7 @@ const DatabaseConnection = () => {
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [lastConnected, setLastConnected] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [useRealConnection, setUseRealConnection] = useState(false);
 
   // Initialize connection from localStorage on component mount
   useEffect(() => {
@@ -60,6 +62,7 @@ const DatabaseConnection = () => {
       setDatabase(postgresConfig.database);
       setUser(postgresConfig.user);
       setLastConnected(postgresConfig.lastConnected);
+      setUseRealConnection(postgresConfig.isRealConnection);
       
       // Load tables if we're connected
       handleGetTables();
@@ -83,7 +86,8 @@ const DatabaseConnection = () => {
         port: parseInt(port, 10),
         database,
         user,
-        password
+        password,
+        useRealConnection
       });
       
       setLastConnected(postgresConfig.lastConnected);
@@ -143,6 +147,7 @@ const DatabaseConnection = () => {
     disconnectDatabase();
     setTables([]);
     setLastConnected(null);
+    setUseRealConnection(false);
   };
   
   const handleClearData = () => {
@@ -151,6 +156,7 @@ const DatabaseConnection = () => {
       clearDatabaseData();
       setTables([]);
       setLastConnected(null);
+      setUseRealConnection(false);
       setIsResetting(false);
     }, 500); // Small delay for better UX
   };
@@ -219,6 +225,27 @@ const DatabaseConnection = () => {
                 />
               </div>
             </div>
+            
+            <div className="flex items-center space-x-2 mt-2">
+              <Switch 
+                id="use-real-connection" 
+                checked={useRealConnection}
+                onCheckedChange={setUseRealConnection}
+              />
+              <Label htmlFor="use-real-connection">
+                Use real PostgreSQL connection
+              </Label>
+            </div>
+            
+            {useRealConnection && (
+              <div className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+                <p className="text-sm">
+                  <strong>Note:</strong> For real PostgreSQL connections, you need to have a PostgreSQL backend service running. 
+                  Update the API_URL in databaseService.ts to point to your backend service.
+                </p>
+              </div>
+            )}
+            
             <Button 
               className="w-full" 
               onClick={handleConnect}
@@ -275,7 +302,9 @@ const DatabaseConnection = () => {
                     )}
                   </div>
                 </div>
-                <Badge variant="outline" className="ml-2">PostgreSQL</Badge>
+                <Badge variant={postgresConfig.isRealConnection ? "default" : "outline"} className="ml-2">
+                  {postgresConfig.isRealConnection ? "Real Connection" : "Mock Connection"}
+                </Badge>
               </div>
             </div>
 
