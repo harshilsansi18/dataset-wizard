@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { 
   UploadCloud, 
@@ -42,7 +43,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { getDatasets, downloadDataset, deleteDataset, DatasetType, toggleDatasetPublicStatus } from "@/services/api";
+import { getDatasets, downloadDataset, deleteDataset, uploadDataset, DatasetType, toggleDatasetPublicStatus } from "@/services/api";
 import DatabaseConnection from "@/components/database/DatabaseConnection";
 import PublicDatasets from "@/components/datasets/PublicDatasets";
 
@@ -150,14 +151,16 @@ const Datasets = () => {
 
     setIsUploading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const file = files[0];
+      const dataset = await uploadDataset(file);
       
       toast({
         title: "Upload Successful",
-        description: `${files[0].name} has been uploaded as a new dataset.`
+        description: `${file.name} has been uploaded as a new dataset.`
       });
       
-      fetchDatasets();
+      // Update the datasets list directly instead of refetching
+      setDatasets(prev => [...prev, dataset]);
     } catch (error) {
       console.error("Upload error:", error);
       toast({

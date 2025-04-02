@@ -2,262 +2,133 @@
 import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
-// This configuration now supports both real and simulated connections
+// PostgreSQL connection configuration state
 export const postgresConfig = {
-  isConnected: false,
-  connectionUrl: "",
+  host: "localhost",
+  port: "5432",
+  database: "",
   user: "",
   password: "",
-  database: "",
-  host: "",
-  port: 5432,
-  isRealConnection: false, // Flag to determine if we're using a real connection
-  importedDatasets: [] as DatasetType[],
-  lastConnected: null as string | null,
-  connectionError: null as string | null
 };
 
-// Initialize the database state from localStorage on module load
-(function initializePostgresState() {
-  try {
-    const savedConnection = localStorage.getItem('postgres_connection');
-    if (savedConnection) {
-      const connectionData = JSON.parse(savedConnection);
-      postgresConfig.isConnected = connectionData.isConnected;
-      postgresConfig.host = connectionData.host;
-      postgresConfig.port = connectionData.port;
-      postgresConfig.database = connectionData.database;
-      postgresConfig.user = connectionData.user;
-      postgresConfig.connectionUrl = connectionData.connectionUrl;
-      postgresConfig.lastConnected = connectionData.lastConnected;
-      postgresConfig.isRealConnection = connectionData.isRealConnection || false;
-      
-      console.log('Initialized database connection from localStorage:', postgresConfig.database);
-      
-      // Also load imported datasets
-      const savedDatasets = localStorage.getItem('db_imported_datasets');
-      if (savedDatasets) {
-        postgresConfig.importedDatasets = JSON.parse(savedDatasets);
-        console.log('Loaded', postgresConfig.importedDatasets.length, 'datasets from localStorage');
-      }
-    }
-  } catch (err) {
-    console.error('Failed to initialize database connection:', err);
-  }
-})();
+// Store imported datasets in-memory
+let importedDatasets: DatasetType[] = [];
 
-// API URL for PostgreSQL connection - this would be your backend service
-const API_URL = "https://your-postgres-api.com"; // Replace with your actual backend URL
+// Configuration for database service
+const USE_REAL_DB_KEY = "use_real_postgres_connection";
+const API_URL = "http://localhost:8000";  // Change this to your FastAPI backend URL
 
-export const connectToDatabase = async (
-  connectionParams: {
-    host: string;
-    port: number;
-    database: string;
-    user: string;
-    password: string;
-    useRealConnection?: boolean;
-  }
-): Promise<boolean> => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log("Connecting to database:", connectionParams.host, connectionParams.database);
-      
-      // Reset error state
-      postgresConfig.connectionError = null;
-      
-      // Flag for real connection
-      const useRealConnection = connectionParams.useRealConnection || false;
-      
-      if (useRealConnection) {
-        try {
-          // Attempt real connection to PostgreSQL via API
-          const response = await fetch(`${API_URL}/connect`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              host: connectionParams.host,
-              port: connectionParams.port,
-              database: connectionParams.database,
-              user: connectionParams.user,
-              password: connectionParams.password
-            })
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to connect to database');
-          }
-          
-          // Connection successful
-          console.log('Real database connection successful');
-        } catch (error) {
-          console.error('Real connection error:', error);
-          postgresConfig.connectionError = error instanceof Error ? error.message : 'Unknown connection error';
-          reject(new Error(postgresConfig.connectionError));
-          return;
-        }
-      }
-      
-      // Store connection details
-      postgresConfig.isConnected = true;
-      postgresConfig.host = connectionParams.host;
-      postgresConfig.port = connectionParams.port;
-      postgresConfig.database = connectionParams.database;
-      postgresConfig.user = connectionParams.user;
-      postgresConfig.isRealConnection = useRealConnection;
-      postgresConfig.connectionUrl = `postgres://${connectionParams.user}:***@${connectionParams.host}:${connectionParams.port}/${connectionParams.database}`;
-      postgresConfig.lastConnected = new Date().toISOString();
-      
-      // Store connection in localStorage
-      localStorage.setItem('postgres_connection', JSON.stringify({
-        isConnected: true,
-        host: connectionParams.host,
-        port: connectionParams.port,
-        database: connectionParams.database,
-        user: connectionParams.user,
-        connectionUrl: postgresConfig.connectionUrl,
-        lastConnected: postgresConfig.lastConnected,
-        isRealConnection: useRealConnection
-      }));
-      
-      toast({
-        title: useRealConnection ? "Real Database Connected" : "Mock Database Connected",
-        description: `Successfully connected to ${connectionParams.database} on ${connectionParams.host}`,
-      });
-      
-      console.log('Database connected successfully:', postgresConfig.database, 
-        useRealConnection ? '(REAL CONNECTION)' : '(MOCK CONNECTION)');
-      resolve(true);
-    } catch (err) {
-      console.error('Failed to connect to database:', err);
-      reject(new Error('Failed to connect to database'));
-    }
+// Function to determine if we should use real database connections
+export const shouldUseRealDatabaseConnection = (): boolean => {
+  return localStorage.getItem(USE_REAL_DB_KEY) === "true";
+};
+
+// Function to toggle between mock and real database connections
+export const toggleRealDatabaseConnection = (useReal: boolean): void => {
+  localStorage.setItem(USE_REAL_DB_KEY, useReal ? "true" : "false");
+  
+  toast({
+    title: useReal ? "Using real PostgreSQL connection" : "Using mock PostgreSQL connection",
+    description: useReal 
+      ? "Now connecting to your actual database" 
+      : "Now using simulated database functionality",
   });
 };
 
-// Force refresh of imported datasets - useful for ensuring they're visible in reports
-export const refreshImportedDatasets = (): DatasetType[] => {
-  try {
-    // Load from localStorage
-    const savedDatasets = localStorage.getItem('db_imported_datasets');
-    if (savedDatasets) {
-      postgresConfig.importedDatasets = JSON.parse(savedDatasets);
-      console.log('Forcefully refreshed datasets:', postgresConfig.importedDatasets.length);
-    }
-    return postgresConfig.importedDatasets;
-  } catch (err) {
-    console.error('Failed to refresh imported datasets:', err);
-    return [];
-  }
-};
-
-// Ensure datasets are visible in validation page by adding a helper function
-export const ensureImportedDatasetsAvailable = (): void => {
-  try {
-    // Load from localStorage
-    const savedDatasets = localStorage.getItem('db_imported_datasets');
-    if (savedDatasets) {
-      postgresConfig.importedDatasets = JSON.parse(savedDatasets);
-      console.log('Ensured datasets available:', postgresConfig.importedDatasets.length);
-    }
-  } catch (err) {
-    console.error('Failed to ensure imported datasets are available:', err);
-  }
-};
-
-// Initialize connection from localStorage if available
+// Initialize database connection based on stored preference
 export const initDatabaseConnection = (): void => {
-  try {
-    const savedConnection = localStorage.getItem('postgres_connection');
-    if (savedConnection) {
-      const connectionData = JSON.parse(savedConnection);
-      postgresConfig.isConnected = connectionData.isConnected;
-      postgresConfig.host = connectionData.host;
-      postgresConfig.port = connectionData.port;
-      postgresConfig.database = connectionData.database;
-      postgresConfig.user = connectionData.user;
-      postgresConfig.connectionUrl = connectionData.connectionUrl;
-      postgresConfig.lastConnected = connectionData.lastConnected;
-      postgresConfig.isRealConnection = connectionData.isRealConnection || false;
-      
-      console.log('Restored database connection from localStorage');
-      
-      // Also load imported datasets
-      ensureImportedDatasetsAvailable();
-    }
-  } catch (err) {
-    console.error('Failed to restore database connection:', err);
-  }
+  const useReal = shouldUseRealDatabaseConnection();
+  console.log(`Database mode: ${useReal ? "Real connection" : "Mock connection"}`);
+  
+  // Clear any stored datasets when switching modes
+  importedDatasets = [];
 };
 
-export const getDatabaseTables = async (): Promise<string[]> => {
-  if (!postgresConfig.isConnected) {
-    toast({
-      title: "Not Connected",
-      description: "Please connect to a database first",
-      variant: "destructive"
-    });
-    return [];
-  }
-  
-  // For real connection, fetch tables from the API
-  if (postgresConfig.isRealConnection) {
+// Test connection to PostgreSQL database
+export const connectToDatabase = async (config = postgresConfig): Promise<boolean> => {
+  if (shouldUseRealDatabaseConnection()) {
     try {
-      const response = await fetch(`${API_URL}/tables?database=${postgresConfig.database}&host=${postgresConfig.host}&port=${postgresConfig.port}&user=${postgresConfig.user}`);
+      const response = await fetch(`${API_URL}/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+      });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to fetch tables from database",
-          variant: "destructive"
-        });
-        return [];
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to connect to database');
       }
       
-      const data = await response.json();
-      console.log(`Retrieved ${data.tables.length} tables from real database`);
-      return data.tables;
+      const result = await response.json();
+      return result.success;
     } catch (error) {
-      console.error('Error fetching tables from real database:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch tables from database",
-        variant: "destructive"
-      });
-      return [];
+      console.error("Database connection error:", error);
+      throw error;
     }
+  } else {
+    // Mock connection logic (always succeeds after delay)
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return true;
   }
-  
-  // For mock connection, return simulated tables
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const tables = [
-        "users",
-        "products",
-        "orders",
-        "transactions",
-        "inventory",
-        "customers",
-        "suppliers",
-        "categories"
-      ];
-      console.log(`Retrieved ${tables.length} tables from database`);
-      resolve(tables);
-    }, 700);
-  });
 };
 
-export const importTableAsDataset = async (tableName: string): Promise<DatasetType> => {
-  if (!postgresConfig.isConnected) {
-    throw new Error("Not connected to database");
+// Disconnect from database
+export const disconnectDatabase = async (): Promise<void> => {
+  // In a real implementation, you might want to close connections
+  importedDatasets = [];
+};
+
+// Get all tables from PostgreSQL database
+export const getDatabaseTables = async (config = postgresConfig): Promise<string[]> => {
+  if (shouldUseRealDatabaseConnection()) {
+    try {
+      const queryParams = new URLSearchParams({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        user: config.user,
+        ...(config.password && { password: config.password }),
+      });
+      
+      const response = await fetch(`${API_URL}/tables?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to fetch tables');
+      }
+      
+      const result = await response.json();
+      return result.tables;
+    } catch (error) {
+      console.error("Error fetching tables:", error);
+      throw error;
+    }
+  } else {
+    // Mock tables (after delay)
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return [
+      "customers",
+      "orders",
+      "products",
+      "employees",
+      "suppliers"
+    ];
   }
-  
-  // For real connection, import table from the API
-  if (postgresConfig.isRealConnection) {
+};
+
+// Import table as dataset
+export const importTableAsDataset = async (
+  tableName: string,
+  config = postgresConfig
+): Promise<DatasetType> => {
+  if (shouldUseRealDatabaseConnection()) {
     try {
       const response = await fetch(`${API_URL}/import`, {
         method: 'POST',
@@ -265,155 +136,173 @@ export const importTableAsDataset = async (tableName: string): Promise<DatasetTy
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          database: postgresConfig.database,
-          host: postgresConfig.host,
-          port: postgresConfig.port,
-          user: postgresConfig.user,
+          ...config,
           table: tableName
-        })
+        }),
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to import table from database");
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to import table');
       }
       
       const dataset = await response.json();
-      
-      // Add to imported datasets
-      postgresConfig.importedDatasets.push(dataset);
-      
-      // Save to localStorage for persistence
-      try {
-        localStorage.setItem('db_imported_datasets', JSON.stringify(postgresConfig.importedDatasets));
-        console.log(`Dataset "${tableName}" imported and saved to localStorage`);
-      } catch (err) {
-        console.error('Failed to save imported dataset to localStorage:', err);
-      }
-      
+      importedDatasets.push(dataset);
       return dataset;
     } catch (error) {
-      console.error('Error importing table from real database:', error);
+      console.error("Error importing table:", error);
       throw error;
     }
+  } else {
+    // Mock dataset creation (after delay)
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    
+    const columnCount = Math.floor(Math.random() * 6) + 3;
+    const rowCount = Math.floor(Math.random() * 200) + 50;
+    
+    // Generate mock headers based on table name
+    const mockHeaders = getMockHeaders(tableName, columnCount);
+    
+    // Generate mock data rows
+    const content = Array.from({ length: rowCount }, (_, rowIndex) => {
+      const row: Record<string, any> = {};
+      mockHeaders.forEach(header => {
+        row[header] = getMockValue(header, rowIndex);
+      });
+      return row;
+    });
+    
+    const dataset: DatasetType = {
+      id: `db_${tableName}_${Date.now()}`,
+      name: tableName,
+      type: "Database",
+      columnCount,
+      rowCount,
+      dateUploaded: new Date().toISOString().split('T')[0],
+      status: "Not Validated",
+      size: `${rowCount * columnCount * 10} B`,
+      lastUpdated: new Date().toISOString().split('T')[0],
+      content,
+      headers: mockHeaders,
+      source: {
+        type: "database",
+        connectionName: config.database,
+        tableName
+      }
+    };
+    
+    importedDatasets.push(dataset);
+    return dataset;
   }
-  
-  // In a real implementation, this would query the table and format as a dataset
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Generate mock data for this table
-      const columnCount = Math.floor(Math.random() * 5) + 3;
-      const rowCount = Math.floor(Math.random() * 200) + 50;
-      
-      const headers = [];
-      for (let i = 0; i < columnCount; i++) {
-        headers.push(`column_${i}`);
-      }
-      
-      const content = [];
-      for (let i = 0; i < rowCount; i++) {
-        const row: Record<string, any> = {};
-        for (let j = 0; j < columnCount; j++) {
-          row[`column_${j}`] = `value_${i}_${j}`;
-        }
-        content.push(row);
-      }
-      
-      const dataset: DatasetType = {
-        id: `db_${Date.now()}`,
-        name: tableName,
-        type: "Database",
-        columnCount,
-        rowCount,
-        dateUploaded: new Date().toISOString().split('T')[0],
-        status: "Not Validated",
-        size: `${rowCount * columnCount * 10} B`,
-        lastUpdated: new Date().toISOString().split('T')[0],
-        content,
-        headers,
-        source: {
-          type: "database",
-          connectionName: postgresConfig.database,
-          tableName: tableName
-        }
-      };
-      
-      // Store in the imported datasets array
-      postgresConfig.importedDatasets.push(dataset);
-      
-      // Save to localStorage for persistence between page loads
-      try {
-        localStorage.setItem('db_imported_datasets', JSON.stringify(postgresConfig.importedDatasets));
-        console.log(`Dataset "${tableName}" imported and saved to localStorage`);
-      } catch (err) {
-        console.error('Failed to save imported dataset to localStorage:', err);
-      }
-      
-      resolve(dataset);
-    }, 1500);
-  });
 };
 
+// Helper function to generate mock headers
+const getMockHeaders = (tableName: string, count: number): string[] => {
+  const baseHeaders: Record<string, string[]> = {
+    customers: ["id", "name", "email", "address", "city", "country", "phone"],
+    orders: ["id", "customer_id", "order_date", "status", "total", "shipping_method"],
+    products: ["id", "name", "category", "price", "stock", "rating"],
+    employees: ["id", "name", "department", "title", "hire_date", "salary"],
+    suppliers: ["id", "name", "contact", "phone", "city", "country"]
+  };
+  
+  // Use table-specific headers or generic ones
+  const headers = baseHeaders[tableName as keyof typeof baseHeaders] || 
+    ["id", "name", "description", "created_at", "updated_at", "status"];
+  
+  // Return requested number of headers (minimum 3)
+  return headers.slice(0, Math.max(count, 3));
+};
+
+// Helper function to generate mock values based on header
+const getMockValue = (header: string, index: number): any => {
+  switch (header) {
+    case "id":
+      return index + 1;
+    case "customer_id":
+    case "product_id":
+      return Math.floor(Math.random() * 100) + 1;
+    case "name":
+      return `${["Alpha", "Beta", "Gamma", "Delta", "Omega"][index % 5]} ${["Corp", "Inc", "Ltd", "LLC", "Group"][Math.floor(index / 5) % 5]}`;
+    case "email":
+      return `user${index}@example.com`;
+    case "price":
+    case "total":
+    case "salary":
+      return (Math.random() * 1000).toFixed(2);
+    case "stock":
+      return Math.floor(Math.random() * 100);
+    case "order_date":
+    case "hire_date":
+    case "created_at":
+    case "updated_at":
+      const date = new Date();
+      date.setDate(date.getDate() - Math.floor(Math.random() * 365));
+      return date.toISOString().split('T')[0];
+    case "status":
+      return ["Active", "Pending", "Completed", "Cancelled"][index % 4];
+    case "rating":
+      return (Math.random() * 5).toFixed(1);
+    case "city":
+      return ["New York", "London", "Tokyo", "Paris", "Berlin"][index % 5];
+    case "country":
+      return ["USA", "UK", "Japan", "France", "Germany"][index % 5];
+    case "phone":
+      return `+1 555-${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`;
+    default:
+      return `Value ${index}`;
+  }
+};
+
+// Function to get all imported datasets
 export const getImportedDatasets = (): DatasetType[] => {
-  // Try to load from localStorage first to ensure consistency
-  ensureImportedDatasetsAvailable();
-  console.log(`Returning ${postgresConfig.importedDatasets.length} imported datasets`);
-  return postgresConfig.importedDatasets;
+  console.log("Returning", importedDatasets.length, "imported datasets");
+  return [...importedDatasets];
 };
 
-export const disconnectDatabase = (): void => {
-  postgresConfig.isConnected = false;
-  postgresConfig.connectionUrl = "";
-  postgresConfig.user = "";
-  postgresConfig.password = "";
-  postgresConfig.database = "";
-  postgresConfig.host = "";
-  postgresConfig.lastConnected = null;
-  
-  // Clear connection from localStorage
-  try {
-    localStorage.removeItem('postgres_connection');
-    console.log('Database disconnected and removed from localStorage');
-  } catch (err) {
-    console.error('Failed to remove connection from localStorage:', err);
+// Function to refresh the list of imported datasets
+export const refreshImportedDatasets = async (
+  config = postgresConfig
+): Promise<DatasetType[]> => {
+  if (shouldUseRealDatabaseConnection()) {
+    try {
+      const tables = await getDatabaseTables(config);
+      
+      // Import all tables (could be optimized to only import new/changed tables)
+      importedDatasets = [];
+      for (const table of tables) {
+        const dataset = await importTableAsDataset(table, config);
+        importedDatasets.push(dataset);
+      }
+      
+      return [...importedDatasets];
+    } catch (error) {
+      console.error("Error refreshing datasets:", error);
+      throw error;
+    }
+  } else {
+    // For mock mode, just return existing datasets or generate new ones if none
+    if (importedDatasets.length === 0) {
+      importedDatasets = await Promise.all([
+        importTableAsDataset("customers", config),
+        importTableAsDataset("orders", config)
+      ]);
+    }
+    return [...importedDatasets];
   }
-  
-  toast({
-    title: "Database Disconnected",
-    description: "Successfully disconnected from the database",
-  });
 };
 
-// New function to completely clear all database data
+// Ensure datasets are available (lazy load)
+export const ensureImportedDatasetsAvailable = async (
+  config = postgresConfig
+): Promise<DatasetType[]> => {
+  if (importedDatasets.length === 0) {
+    return refreshImportedDatasets(config);
+  }
+  return [...importedDatasets];
+};
+
+// Clear database data
 export const clearDatabaseData = (): void => {
-  // Reset postgres config
-  postgresConfig.isConnected = false;
-  postgresConfig.connectionUrl = "";
-  postgresConfig.user = "";
-  postgresConfig.password = "";
-  postgresConfig.database = "";
-  postgresConfig.host = "";
-  postgresConfig.port = 5432;
-  postgresConfig.lastConnected = null;
-  postgresConfig.importedDatasets = [];
-  
-  // Clear from localStorage
-  try {
-    localStorage.removeItem('postgres_connection');
-    localStorage.removeItem('db_imported_datasets');
-    console.log('All database data cleared successfully');
-    
-    toast({
-      title: "Database Data Cleared",
-      description: "All database connection information and imported datasets have been deleted",
-    });
-  } catch (err) {
-    console.error('Failed to clear database data from localStorage:', err);
-    
-    toast({
-      title: "Error",
-      description: "Failed to clear database data",
-      variant: "destructive"
-    });
-  }
+  importedDatasets = [];
 };

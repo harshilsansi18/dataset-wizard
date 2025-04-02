@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, Database, Download, Loader2, Info } from "lucide-react";
+import { FileSpreadsheet, Database, Download, Loader2, Info, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { DatasetType, downloadDataset, getPublicDatasets } from "@/services/api";
@@ -13,6 +13,7 @@ const PublicDatasets = () => {
   const [publicDatasets, setPublicDatasets] = useState<DatasetType[]>([]);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchPublicDatasets();
@@ -32,6 +33,21 @@ const PublicDatasets = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchPublicDatasets();
+      toast({
+        title: "Refreshed",
+        description: "Public datasets have been refreshed"
+      });
+    } catch (error) {
+      console.error("Error refreshing public datasets:", error);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -57,14 +73,29 @@ const PublicDatasets = () => {
 
   return (
     <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <FileSpreadsheet className="mr-2 h-5 w-5 text-green-600" />
-          Public Datasets
-        </CardTitle>
-        <CardDescription>
-          Datasets that have been shared for public access
-        </CardDescription>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="flex items-center">
+            <FileSpreadsheet className="mr-2 h-5 w-5 text-green-600" />
+            Public Datasets
+          </CardTitle>
+          <CardDescription>
+            Datasets that have been shared for public access
+          </CardDescription>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          {isRefreshing ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Refresh
+        </Button>
       </CardHeader>
       <CardContent className="p-0">
         {isLoading ? (

@@ -9,156 +9,173 @@
  * 
  * You can implement this backend using:
  * 1. Node.js + Express
- * 2. Python + Flask
- * 3. Supabase functions
- * 4. Any other backend technology of your choice
+ * 2. Python + FastAPI
+ * 3. Any other backend technology of your choice
  */
 
 /**
- * Example Node.js + Express implementation:
+ * Example FastAPI implementation:
  * 
- * ```javascript
- * const express = require('express');
- * const { Pool } = require('pg');
- * const cors = require('cors');
- * const app = express();
+ * ```python
+ * from fastapi import FastAPI, HTTPException, Body, Query
+ * from fastapi.middleware.cors import CORSMiddleware
+ * from pydantic import BaseModel
+ * import psycopg2
+ * from datetime import date
+ * import uvicorn
  * 
- * app.use(cors());
- * app.use(express.json());
+ * app = FastAPI()
  * 
- * // POST /connect - Test connection to database
- * app.post('/connect', async (req, res) => {
- *   const { host, port, database, user, password } = req.body;
- *   
- *   try {
- *     const pool = new Pool({
- *       host,
- *       port,
- *       database,
- *       user,
- *       password,
- *       ssl: {
- *         rejectUnauthorized: false
- *       }
- *     });
- *     
- *     // Test connection
- *     const client = await pool.connect();
- *     client.release();
- *     res.json({ success: true });
- *   } catch (error) {
- *     console.error('Connection error:', error);
- *     res.status(500).json({
- *       success: false,
- *       message: error.message
- *     });
- *   }
- * });
+ * # Enable CORS
+ * app.add_middleware(
+ *     CORSMiddleware,
+ *     allow_origins=["*"],  # In production, change to your frontend origin
+ *     allow_credentials=True,
+ *     allow_methods=["*"],
+ *     allow_headers=["*"],
+ * )
  * 
- * // GET /tables - Get all tables in database
- * app.get('/tables', async (req, res) => {
- *   const { host, port, database, user } = req.query;
- *   // In a real app, you'd use a connection pool or get credentials from a secure store
- *   
- *   try {
- *     const pool = new Pool({
- *       host,
- *       port,
- *       database,
- *       user
- *     });
- *     
- *     const client = await pool.connect();
- *     const result = await client.query(`
- *       SELECT table_name 
- *       FROM information_schema.tables 
- *       WHERE table_schema = 'public'
- *     `);
- *     
- *     client.release();
- *     
- *     const tables = result.rows.map(row => row.table_name);
- *     res.json({ tables });
- *   } catch (error) {
- *     console.error('Error fetching tables:', error);
- *     res.status(500).json({
- *       success: false,
- *       message: error.message
- *     });
- *   }
- * });
+ * class DatabaseConnection(BaseModel):
+ *     host: str
+ *     port: int
+ *     database: str
+ *     user: str
+ *     password: str = None
  * 
- * // POST /import - Import table as dataset
- * app.post('/import', async (req, res) => {
- *   const { host, port, database, user, table } = req.body;
- *   
- *   try {
- *     const pool = new Pool({
- *       host,
- *       port,
- *       database,
- *       user
- *     });
- *     
- *     const client = await pool.connect();
- *     
- *     // Get column information
- *     const columnResult = await client.query(`
- *       SELECT column_name, data_type 
- *       FROM information_schema.columns 
- *       WHERE table_schema = 'public' AND table_name = $1
- *     `, [table]);
- *     
- *     // Get data
- *     const dataResult = await client.query(`SELECT * FROM ${table} LIMIT 1000`);
- *     
- *     client.release();
- *     
- *     const headers = columnResult.rows.map(col => col.column_name);
- *     const rowCount = dataResult.rowCount;
- *     const columnCount = headers.length;
- *     
- *     const dataset = {
- *       id: `db_${Date.now()}`,
- *       name: table,
- *       type: "Database",
- *       columnCount,
- *       rowCount,
- *       dateUploaded: new Date().toISOString().split('T')[0],
- *       status: "Not Validated",
- *       size: `${rowCount * columnCount * 10} B`,
- *       lastUpdated: new Date().toISOString().split('T')[0],
- *       content: dataResult.rows,
- *       headers,
- *       source: {
- *         type: "database",
- *         connectionName: database,
- *         tableName: table
- *       }
- *     };
- *     
- *     res.json(dataset);
- *   } catch (error) {
- *     console.error('Error importing table:', error);
- *     res.status(500).json({
- *       success: false,
- *       message: error.message
- *     });
- *   }
- * });
+ * class TableImport(BaseModel):
+ *     host: str
+ *     port: int
+ *     database: str
+ *     user: str
+ *     table: str
+ *     password: str = None
  * 
- * const PORT = process.env.PORT || 3001;
- * app.listen(PORT, () => {
- *   console.log(`Server running on port ${PORT}`);
- * });
+ * @app.post("/connect")
+ * def test_connection(connection: DatabaseConnection):
+ *     try:
+ *         conn = psycopg2.connect(
+ *             host=connection.host,
+ *             port=connection.port,
+ *             database=connection.database,
+ *             user=connection.user,
+ *             password=connection.password,
+ *             sslmode='require'
+ *         )
+ *         conn.close()
+ *         return {"success": True}
+ *     except Exception as e:
+ *         raise HTTPException(status_code=500, detail=f"Connection error: {str(e)}")
+ * 
+ * @app.get("/tables")
+ * def get_tables(
+ *     host: str, 
+ *     port: int, 
+ *     database: str, 
+ *     user: str, 
+ *     password: str = None
+ * ):
+ *     try:
+ *         conn = psycopg2.connect(
+ *             host=host,
+ *             port=port,
+ *             database=database,
+ *             user=user,
+ *             password=password,
+ *             sslmode='require'
+ *         )
+ *         cursor = conn.cursor()
+ *         cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+ *         tables = [row[0] for row in cursor.fetchall()]
+ *         cursor.close()
+ *         conn.close()
+ *         return {"tables": tables}
+ *     except Exception as e:
+ *         raise HTTPException(status_code=500, detail=f"Error fetching tables: {str(e)}")
+ * 
+ * @app.post("/import")
+ * def import_table(import_data: TableImport):
+ *     try:
+ *         conn = psycopg2.connect(
+ *             host=import_data.host,
+ *             port=import_data.port,
+ *             database=import_data.database,
+ *             user=import_data.user,
+ *             password=import_data.password,
+ *             sslmode='require'
+ *         )
+ *         cursor = conn.cursor()
+ *         
+ *         # Get column information
+ *         cursor.execute("""
+ *             SELECT column_name, data_type 
+ *             FROM information_schema.columns 
+ *             WHERE table_schema = 'public' AND table_name = %s
+ *         """, (import_data.table,))
+ *         columns = cursor.fetchall()
+ *         headers = [col[0] for col in columns]
+ *         
+ *         # Get data (limit to 1000 rows)
+ *         cursor.execute(f"SELECT * FROM {import_data.table} LIMIT 1000")
+ *         rows = cursor.fetchall()
+ *         
+ *         # Convert to list of dictionaries
+ *         content = []
+ *         for row in rows:
+ *             row_dict = {}
+ *             for i, header in enumerate(headers):
+ *                 # Handle date conversions and other special types
+ *                 if isinstance(row[i], date):
+ *                     row_dict[header] = row[i].isoformat()
+ *                 else:
+ *                     row_dict[header] = row[i]
+ *             content.append(row_dict)
+ *         
+ *         cursor.close()
+ *         conn.close()
+ *         
+ *         # Prepare the dataset response
+ *         dataset = {
+ *             "id": f"db_{import_data.table}_{date.today().isoformat()}",
+ *             "name": import_data.table,
+ *             "type": "Database",
+ *             "columnCount": len(headers),
+ *             "rowCount": len(content),
+ *             "dateUploaded": date.today().isoformat(),
+ *             "status": "Not Validated",
+ *             "size": f"{len(content) * len(headers) * 10} B",
+ *             "lastUpdated": date.today().isoformat(),
+ *             "content": content,
+ *             "headers": headers,
+ *             "isPublic": False,
+ *             "source": {
+ *                 "type": "database",
+ *                 "connectionName": import_data.database,
+ *                 "tableName": import_data.table
+ *             }
+ *         }
+ *         
+ *         return dataset
+ *     except Exception as e:
+ *         raise HTTPException(status_code=500, detail=f"Error importing table: {str(e)}")
+ * 
+ * if __name__ == "__main__":
+ *     uvicorn.run(app, host="0.0.0.0", port=8000)
  * ```
  */
 
 /**
  * HOW TO USE:
  * 
- * 1. Create a backend service that implements the above API endpoints
- * 2. Deploy your backend service to a hosting platform (Vercel, Heroku, AWS, etc.)
- * 3. Update the API_URL in databaseService.ts to point to your backend service
- * 4. Toggle the "Use real PostgreSQL connection" switch in the UI to use your real database
+ * 1. Install the required Python packages:
+ *    pip install fastapi uvicorn psycopg2-binary
+ * 
+ * 2. Save the above code to a file named app.py
+ * 
+ * 3. Run the FastAPI application:
+ *    uvicorn app:app --reload
+ * 
+ * 4. Update the API_URL in databaseService.ts to point to your backend service
+ *    (e.g., 'http://localhost:8000' if running locally)
+ * 
+ * 5. Toggle the "Use real PostgreSQL connection" switch in the UI to use your real database
  */
