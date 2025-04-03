@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -28,13 +27,19 @@ import {
   RefreshCw,
   Shield,
   PieChart as PieChartIcon,
-  GitCompare
+  GitCompare,
+  Clock
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { getDatasets, getAllValidationResults, DatasetType, ValidationResult } from "@/services/api";
+import { 
+  getDatasets, 
+  getAllValidationResults, 
+  getImportedDatasets, 
+  DatasetType, 
+  ValidationResult 
+} from "@/services/api";
 import { toast } from "@/components/ui/use-toast";
 
-// Function to count validation results by status
 const getValidationStatusCounts = (validationResults: Record<string, ValidationResult[]>) => {
   let passCount = 0;
   let warningCount = 0;
@@ -49,7 +54,6 @@ const getValidationStatusCounts = (validationResults: Record<string, ValidationR
   return { passCount, warningCount, failCount };
 };
 
-// Function to get dataset validation stats
 const getDatasetValidationStats = (datasets: DatasetType[]) => {
   return {
     validatedCount: datasets.filter(d => d.status === "Validated").length,
@@ -65,6 +69,8 @@ const Dashboard = () => {
   const [validationResults, setValidationResults] = useState<Record<string, ValidationResult[]>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [latestDatabaseDataset, setLatestDatabaseDataset] = useState<DatasetType | null>(null);
+  const [latestValidation, setLatestValidation] = useState<{datasetId: string, results: ValidationResult[]} | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -80,6 +86,30 @@ const Dashboard = () => {
       
       setDatasets(datasetsData);
       setValidationResults(validationResultsData);
+      
+      const dbDatasets = datasetsData.filter(ds => ds.type === "Database");
+      if (dbDatasets.length > 0) {
+        const sortedDbDatasets = [...dbDatasets].sort((a, b) => 
+          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+        );
+        setLatestDatabaseDataset(sortedDbDatasets[0]);
+      }
+      
+      const validations: { datasetId: string, results: ValidationResult[] }[] = [];
+      Object.entries(validationResultsData).forEach(([datasetId, results]) => {
+        if (results.length > 0) {
+          validations.push({ datasetId, results });
+        }
+      });
+      
+      if (validations.length > 0) {
+        validations.sort((a, b) => {
+          const aDate = new Date(a.results[0].timestamp);
+          const bDate = new Date(b.results[0].timestamp);
+          return bDate.getTime() - aDate.getTime();
+        });
+        setLatestValidation(validations[0]);
+      }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       toast({
@@ -103,7 +133,6 @@ const Dashboard = () => {
     });
   };
 
-  // Prepare data for charts and stats
   const { passCount, warningCount, failCount } = getValidationStatusCounts(validationResults);
   const totalChecks = passCount + warningCount + failCount;
   
@@ -121,7 +150,6 @@ const Dashboard = () => {
     { name: "Not Validated", value: datasetStats.notValidatedCount, color: "#94a3b8" },
   ].filter(item => item.value > 0);
   
-  // Most recent validation activity
   const recentValidations: { datasetId: string, results: ValidationResult[] }[] = [];
   
   Object.entries(validationResults).forEach(([datasetId, results]) => {
@@ -130,7 +158,6 @@ const Dashboard = () => {
     }
   });
   
-  // Sort by most recent timestamp
   recentValidations.sort((a, b) => {
     const aDate = new Date(a.results[0].timestamp);
     const bDate = new Date(b.results[0].timestamp);
@@ -158,7 +185,6 @@ const Dashboard = () => {
         </div>
       ) : (
         <>
-          {/* Summary Cards */}
           <div className="mb-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
@@ -252,11 +278,166 @@ const Dashboard = () => {
                 </div>
               </CardContent>
             </Card>
+            
+            <Card className="col-span-2">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-slate-500">Latest Database Added</CardTitle>
+                  <Database className="h-5 w-5 text-slate-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {latestDatabaseDataset ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-medium">{latestDatabaseDataset.name}</h3>
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${
+                        latestDatabaseDataset.status === 'Validated' 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                          : latestDatabaseDataset.status === 'Issues Found'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                          : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {latestDatabaseDataset.status}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm text-slate-500">
+                      <div>
+                        <p className="font-medium">Rows</p>
+                        <p>{latestDatabaseDataset.rowCount}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Columns</p>
+                        <p>{latestDatabaseDataset.columnCount}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">Added</p>
+                        <p>{new Date(latestDatabaseDataset.dateUploaded).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    {latestDatabaseDataset.source?.type === "database" && (
+                      <div className="mt-2 text-xs text-slate-500">
+                        <p>From: {latestDatabaseDataset.source.connectionName}</p>
+                        <p>Table: {latestDatabaseDataset.source.tableName}</p>
+                      </div>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2 w-full"
+                      onClick={() => navigate(`/datasets?id=${latestDatabaseDataset.id}`)}
+                    >
+                      View Details
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex h-32 flex-col items-center justify-center">
+                    <Database className="mb-2 h-10 w-10 text-slate-300" />
+                    <p className="text-center text-sm text-slate-500">
+                      No database datasets available
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={() => navigate('/datasets')}
+                    >
+                      Import Database
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Card className="col-span-2">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium text-slate-500">Latest Validation</CardTitle>
+                  <Shield className="h-5 w-5 text-slate-400" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {latestValidation && datasets.find(d => d.id === latestValidation.datasetId) ? (() => {
+                  const dataset = datasets.find(d => d.id === latestValidation!.datasetId)!;
+                  const passCount = latestValidation.results.filter(r => r.status === "Pass").length;
+                  const warningCount = latestValidation.results.filter(r => r.status === "Warning").length;
+                  const failCount = latestValidation.results.filter(r => r.status === "Fail").length;
+                  const validationDate = new Date(latestValidation.results[0].timestamp);
+                  
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-medium">{dataset.name}</h3>
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${
+                          dataset.status === 'Validated' 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                            : dataset.status === 'Issues Found'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                            : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                        }`}>
+                          {dataset.status}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="flex flex-col items-center rounded-lg bg-green-50 p-2 dark:bg-green-900/20">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <p className="mt-1 text-lg font-semibold text-green-700">{passCount}</p>
+                          <p className="text-xs text-green-700">Pass</p>
+                        </div>
+                        
+                        <div className="flex flex-col items-center rounded-lg bg-amber-50 p-2 dark:bg-amber-900/20">
+                          <AlertTriangle className="h-5 w-5 text-amber-600" />
+                          <p className="mt-1 text-lg font-semibold text-amber-700">{warningCount}</p>
+                          <p className="text-xs text-amber-700">Warning</p>
+                        </div>
+                        
+                        <div className="flex flex-col items-center rounded-lg bg-red-50 p-2 dark:bg-red-900/20">
+                          <XCircle className="h-5 w-5 text-red-600" />
+                          <p className="mt-1 text-lg font-semibold text-red-700">{failCount}</p>
+                          <p className="text-xs text-red-700">Fail</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-xs text-slate-500">
+                        Run on: {validationDate.toLocaleDateString()} at {validationDate.toLocaleTimeString()}
+                      </div>
+                      
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="mt-2 w-full"
+                        onClick={() => navigate(`/reports?id=${latestValidation.datasetId}`)}
+                      >
+                        View Report
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })() : (
+                  <div className="flex h-32 flex-col items-center justify-center">
+                    <Shield className="mb-2 h-10 w-10 text-slate-300" />
+                    <p className="text-center text-sm text-slate-500">
+                      No validation data available
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={() => navigate('/validation')}
+                    >
+                      Run Validation
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
           
-          {/* Charts and Activity */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {/* Datasets Status Chart */}
             <Card className="lg:col-span-1">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -310,7 +491,6 @@ const Dashboard = () => {
               </CardFooter>
             </Card>
             
-            {/* Validation Results Chart */}
             <Card className="lg:col-span-1">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -364,7 +544,6 @@ const Dashboard = () => {
               </CardFooter>
             </Card>
             
-            {/* Recent Activity */}
             <Card className="lg:col-span-1">
               <CardHeader>
                 <div className="flex items-center justify-between">
