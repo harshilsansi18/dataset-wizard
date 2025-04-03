@@ -28,7 +28,7 @@ import {
   Shield,
   PieChart as PieChartIcon,
   GitCompare,
-  Clock
+  Clock as ClockIcon
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { 
@@ -557,7 +557,7 @@ const Dashboard = () => {
               <CardContent>
                 {recentValidations.length === 0 ? (
                   <div className="flex h-64 flex-col items-center justify-center">
-                    <Clock className="mb-4 h-12 w-12 text-slate-300" />
+                    <ClockIcon className="mb-4 h-12 w-12 text-slate-300" />
                     <p className="text-center text-sm text-slate-500">
                       No recent activity. <br />
                       Run validations to see activity here.
@@ -627,23 +627,5 @@ const Dashboard = () => {
     </div>
   );
 };
-
-const Clock = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg"
-    width="24" 
-    height="24" 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <circle cx="12" cy="12" r="10"></circle>
-    <polyline points="12 6 12 12 16 14"></polyline>
-  </svg>
-);
 
 export default Dashboard;
