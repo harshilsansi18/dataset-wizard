@@ -301,7 +301,6 @@ export const getImportedDatasets = (): DatasetType[] => {
 
 // Function to refresh the list of imported datasets
 export const refreshImportedDatasets = (): DatasetType[] => {
-  // Immediately return the current datasets (no async operation)
   return [...importedDatasets];
 };
 

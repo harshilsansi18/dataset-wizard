@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,9 @@ import {
   disconnectDatabase, 
   postgresConfig,
   initDatabaseConnection,
-  clearDatabaseData
+  clearDatabaseData,
+  toggleRealDatabaseConnection,
+  shouldUseRealDatabaseConnection,
 } from "@/services/api";
 
 const formatTimeSince = (isoString: string | null): string => {
@@ -53,13 +56,16 @@ const DatabaseConnection = () => {
   useEffect(() => {
     initDatabaseConnection();
     
+    // Initialize UI based on current connection state
+    const useReal = shouldUseRealDatabaseConnection();
+    setUseRealConnection(useReal);
+    
     if (postgresConfig.isConnected) {
       setHost(postgresConfig.host);
-      setPort(postgresConfig.port.toString());
+      setPort(postgresConfig.port);
       setDatabase(postgresConfig.database);
       setUser(postgresConfig.user);
       setLastConnected(postgresConfig.lastConnected);
-      setUseRealConnection(postgresConfig.isRealConnection);
       
       handleGetTables();
     }
@@ -77,9 +83,14 @@ const DatabaseConnection = () => {
 
     setIsConnecting(true);
     try {
+      // Toggle real connection if needed
+      if (useRealConnection !== shouldUseRealDatabaseConnection()) {
+        toggleRealDatabaseConnection(useRealConnection);
+      }
+      
       await connectToDatabase({
         host,
-        port,
+        port, // Already a string, no need to convert
         database,
         user,
         password
@@ -141,7 +152,6 @@ const DatabaseConnection = () => {
     disconnectDatabase();
     setTables([]);
     setLastConnected(null);
-    setUseRealConnection(false);
   };
   
   const handleClearData = () => {
@@ -234,8 +244,8 @@ const DatabaseConnection = () => {
             {useRealConnection && (
               <div className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
                 <p className="text-sm">
-                  <strong>Note:</strong> For real PostgreSQL connections, you need to have a PostgreSQL backend service running. 
-                  Update the API_URL in databaseService.ts to point to your backend service.
+                  <strong>Note:</strong> For real PostgreSQL connections, ensure the FastAPI backend is running with:
+                  <code className="ml-2 p-1 bg-amber-100 dark:bg-amber-900 rounded">cd fastapi-backend && uvicorn app:app --reload</code>
                 </p>
               </div>
             )}

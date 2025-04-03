@@ -7,6 +7,8 @@ import { getImportedDatasets } from "./databaseService";
 const DATASETS_STORAGE_KEY = "soda_core_datasets";
 // Add a separate storage key for public datasets
 const PUBLIC_DATASETS_STORAGE_KEY = "soda_core_public_datasets";
+// API URL for server-side public datasets
+const API_URL = "http://localhost:8000"; 
 
 // Initialize store from localStorage or create empty objects
 const initializeStore = () => {
@@ -63,6 +65,61 @@ const savePublicToStorage = (data: any) => {
   }
 };
 
+// Get public datasets from the server
+const fetchServerPublicDatasets = async (): Promise<DatasetType[]> => {
+  try {
+    const response = await fetch(`${API_URL}/public-datasets`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch public datasets from server');
+    }
+    const data = await response.json();
+    return data.datasets || [];
+  } catch (error) {
+    console.error("Error fetching public datasets from server:", error);
+    return [];
+  }
+};
+
+// Save a dataset to the server's public collection
+const saveDatasetToServer = async (dataset: DatasetType): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_URL}/public-datasets/${dataset.id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(dataset),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to save dataset to server');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error saving dataset to server:", error);
+    return false;
+  }
+};
+
+// Remove a dataset from the server's public collection
+const removeDatasetFromServer = async (id: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_URL}/public-datasets/${id}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to remove dataset from server');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error removing dataset from server:", error);
+    return false;
+  }
+};
+
 // API functions
 export const getDatasets = (): Promise<DatasetType[]> => {
   return new Promise((resolve) => {
@@ -82,88 +139,101 @@ export const getDatasets = (): Promise<DatasetType[]> => {
   });
 };
 
-// Get public datasets only - now fetches from both local and public storage
-export const getPublicDatasets = (): Promise<DatasetType[]> => {
-  return new Promise((resolve) => {
-    // Get all public datasets from the public store
-    const publicDatasets = Object.values(publicDatasetsStore);
-    
-    // Get all datasets and filter for public ones in the user's own store
-    getDatasets().then(datasets => {
-      // Get only public datasets from user's personal store
-      const userPublicDatasets = datasets.filter(dataset => dataset.isPublic === true);
-      
-      // Combine all public datasets
-      const allPublicDatasets = [...publicDatasets, ...userPublicDatasets];
-      
-      // Remove duplicates
-      const uniquePublicDatasets = allPublicDatasets.filter((dataset, index, self) => 
-        index === self.findIndex((d) => d.id === dataset.id)
-      );
-      
-      resolve(uniquePublicDatasets);
-    });
-  });
+// Get public datasets from both local storage and server
+export const getPublicDatasets = async (): Promise<DatasetType[]> => {
+  // Fetch public datasets from server
+  const serverPublicDatasets = await fetchServerPublicDatasets();
+  
+  // Get all public datasets from the public store
+  const localPublicDatasets = Object.values(publicDatasetsStore);
+  
+  // Combine local and server datasets
+  const combinedPublicDatasets = [...localPublicDatasets, ...serverPublicDatasets];
+  
+  // Get user's own public datasets
+  const userDatasets = await getDatasets();
+  const userPublicDatasets = userDatasets.filter(dataset => dataset.isPublic === true);
+  
+  // Combine all public datasets
+  const allPublicDatasets = [...combinedPublicDatasets, ...userPublicDatasets];
+  
+  // Remove duplicates
+  const uniquePublicDatasets = allPublicDatasets.filter((dataset, index, self) => 
+    index === self.findIndex((d) => d.id === dataset.id)
+  );
+  
+  return uniquePublicDatasets;
 };
 
 // Toggle dataset public status
 export const toggleDatasetPublicStatus = (id: string, isPublic: boolean): Promise<DatasetType | undefined> => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // Check if dataset exists in user's own store
-      if (datasetsStore[id]) {
-        // Update the dataset in the user's store
-        datasetsStore[id] = {
-          ...datasetsStore[id],
-          isPublic,
-          lastUpdated: new Date().toISOString().split('T')[0]
-        };
-        saveToStorage(datasetsStore);
+  return new Promise(async (resolve, reject) => {
+    // Check if dataset exists in user's own store
+    if (datasetsStore[id]) {
+      // Update the dataset in the user's store
+      datasetsStore[id] = {
+        ...datasetsStore[id],
+        isPublic,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+      saveToStorage(datasetsStore);
+      
+      // If making it public, also add to the public store and server
+      if (isPublic) {
+        publicDatasetsStore[id] = datasetsStore[id];
+        savePublicToStorage(publicDatasetsStore);
         
-        // If making it public, also add to the public store
-        if (isPublic) {
-          publicDatasetsStore[id] = datasetsStore[id];
+        // Save to server
+        await saveDatasetToServer(datasetsStore[id]);
+      } else {
+        // If making it private, remove from public store and server
+        if (publicDatasetsStore[id]) {
+          delete publicDatasetsStore[id];
           savePublicToStorage(publicDatasetsStore);
+        }
+        
+        // Remove from server
+        await removeDatasetFromServer(id);
+      }
+      
+      resolve(datasetsStore[id]);
+    } else {
+      // If the dataset doesn't exist in the user's store, check the database datasets
+      const dbDatasets = getImportedDatasets();
+      const dbDataset = dbDatasets.find(ds => ds.id === id);
+      
+      if (dbDataset) {
+        // Update the database dataset's public status
+        dbDataset.isPublic = isPublic;
+        
+        // If making public, add to public store and server
+        if (isPublic) {
+          publicDatasetsStore[id] = dbDataset;
+          savePublicToStorage(publicDatasetsStore);
+          
+          // Save to server
+          await saveDatasetToServer(dbDataset);
         } else {
-          // If making it private, remove from public store
+          // If making private, remove from public store and server
           if (publicDatasetsStore[id]) {
             delete publicDatasetsStore[id];
             savePublicToStorage(publicDatasetsStore);
           }
+          
+          // Remove from server
+          await removeDatasetFromServer(id);
         }
         
-        resolve(datasetsStore[id]);
+        resolve(dbDataset);
       } else {
-        // If the dataset doesn't exist in the user's store, check the public store
-        const dbDatasets = getImportedDatasets();
-        const dbDataset = dbDatasets.find(ds => ds.id === id);
-        
-        if (dbDataset) {
-          // Update the database dataset's public status
-          dbDataset.isPublic = isPublic;
-          
-          // If making public, add to public store
-          if (isPublic) {
-            publicDatasetsStore[id] = dbDataset;
-            savePublicToStorage(publicDatasetsStore);
-          } else {
-            // If making private, remove from public store
-            if (publicDatasetsStore[id]) {
-              delete publicDatasetsStore[id];
-              savePublicToStorage(publicDatasetsStore);
-            }
-          }
-          
-          resolve(dbDataset);
-        } else {
-          // Dataset not found
-          reject(new Error("Dataset not found"));
-        }
+        // Dataset not found
+        reject(new Error("Dataset not found"));
       }
-    }, 500);
+    }
   });
 };
 
+// Get dataset by ID
 export const getDatasetById = (id: string): Promise<DatasetType | undefined> => {
   return new Promise((resolve) => {
     setTimeout(() => {
@@ -333,28 +403,29 @@ export const downloadDataset = (dataset: DatasetType): Promise<boolean> => {
 };
 
 export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const id = `ds_${Date.now()}`;
-      const newDataset: DatasetType = { 
-        ...dataset, 
-        id,
-        status: "Not Validated",
-        lastUpdated: new Date().toISOString().split('T')[0],
-        isPublic: dataset.isPublic || false
-      };
+  return new Promise(async (resolve) => {
+    const id = `ds_${Date.now()}`;
+    const newDataset: DatasetType = { 
+      ...dataset, 
+      id,
+      status: "Not Validated",
+      lastUpdated: new Date().toISOString().split('T')[0],
+      isPublic: dataset.isPublic || false
+    };
+    
+    datasetsStore[id] = newDataset;
+    saveToStorage(datasetsStore);
+    
+    // If dataset is public, also add to public store and server
+    if (newDataset.isPublic) {
+      publicDatasetsStore[id] = newDataset;
+      savePublicToStorage(publicDatasetsStore);
       
-      datasetsStore[id] = newDataset;
-      saveToStorage(datasetsStore);
-      
-      // If dataset is public, also add to public store
-      if (newDataset.isPublic) {
-        publicDatasetsStore[id] = newDataset;
-        savePublicToStorage(publicDatasetsStore);
-      }
-      
-      resolve(newDataset);
-    }, 500);
+      // Save to server
+      await saveDatasetToServer(newDataset);
+    }
+    
+    resolve(newDataset);
   });
 };
 
@@ -362,64 +433,77 @@ export const updateDataset = (
   id: string,
   updates: Partial<DatasetType>
 ): Promise<DatasetType | undefined> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      if (datasetsStore[id]) {
-        const updatedDataset = { 
-          ...datasetsStore[id], 
-          ...updates,
-          lastUpdated: new Date().toISOString().split('T')[0]
-        };
-        
-        datasetsStore[id] = updatedDataset;
-        saveToStorage(datasetsStore);
-        
-        // Handle public status updates
-        if (updates.isPublic !== undefined) {
-          if (updates.isPublic) {
-            // If making public, add to public store
-            publicDatasetsStore[id] = updatedDataset;
-            savePublicToStorage(publicDatasetsStore);
-          } else {
-            // If making private, remove from public store
-            if (publicDatasetsStore[id]) {
-              delete publicDatasetsStore[id];
-              savePublicToStorage(publicDatasetsStore);
-            }
-          }
-        } else if (updatedDataset.isPublic) {
-          // If dataset is already public, update it in the public store too
+  return new Promise(async (resolve) => {
+    if (datasetsStore[id]) {
+      const updatedDataset = { 
+        ...datasetsStore[id], 
+        ...updates,
+        lastUpdated: new Date().toISOString().split('T')[0]
+      };
+      
+      datasetsStore[id] = updatedDataset;
+      saveToStorage(datasetsStore);
+      
+      // Handle public status updates
+      if (updates.isPublic !== undefined) {
+        if (updates.isPublic) {
+          // If making public, add to public store and server
           publicDatasetsStore[id] = updatedDataset;
           savePublicToStorage(publicDatasetsStore);
+          
+          // Save to server
+          await saveDatasetToServer(updatedDataset);
+        } else {
+          // If making private, remove from public store and server
+          if (publicDatasetsStore[id]) {
+            delete publicDatasetsStore[id];
+            savePublicToStorage(publicDatasetsStore);
+            
+            // Remove from server
+            await removeDatasetFromServer(id);
+          }
         }
+      } else if (updatedDataset.isPublic) {
+        // If dataset is already public, update it in the public store and server
+        publicDatasetsStore[id] = updatedDataset;
+        savePublicToStorage(publicDatasetsStore);
         
-        resolve(updatedDataset);
-      } else {
-        resolve(undefined);
+        // Save to server
+        await saveDatasetToServer(updatedDataset);
       }
-    }, 500);
+      
+      resolve(updatedDataset);
+    } else {
+      resolve(undefined);
+    }
   });
 };
 
 export const deleteDataset = (id: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      if (datasetsStore[id]) {
-        // Delete from user's store
-        delete datasetsStore[id];
-        saveToStorage(datasetsStore);
-        
-        // Also delete from public store if it exists there
-        if (publicDatasetsStore[id]) {
-          delete publicDatasetsStore[id];
-          savePublicToStorage(publicDatasetsStore);
-        }
-        
-        resolve(true);
-      } else {
-        resolve(false);
+  return new Promise(async (resolve) => {
+    if (datasetsStore[id]) {
+      // Check if dataset is public before deletion
+      const isPublic = datasetsStore[id].isPublic;
+      
+      // Delete from user's store
+      delete datasetsStore[id];
+      saveToStorage(datasetsStore);
+      
+      // Also delete from public store if it exists there
+      if (publicDatasetsStore[id]) {
+        delete publicDatasetsStore[id];
+        savePublicToStorage(publicDatasetsStore);
       }
-    }, 500);
+      
+      // If it was public, remove from server too
+      if (isPublic) {
+        await removeDatasetFromServer(id);
+      }
+      
+      resolve(true);
+    } else {
+      resolve(false);
+    }
   });
 };
 

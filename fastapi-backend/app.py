@@ -5,6 +5,8 @@ from pydantic import BaseModel
 import psycopg2
 from datetime import date
 import uvicorn
+import json
+import os
 
 app = FastAPI()
 
@@ -16,6 +18,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# File to store public datasets
+PUBLIC_DATASETS_FILE = "public_datasets.json"
 
 class DatabaseConnection(BaseModel):
     host: str
@@ -31,6 +36,25 @@ class TableImport(BaseModel):
     user: str
     table: str
     password: str = None
+
+class PublicDataset(BaseModel):
+    id: str
+    dataset: dict
+
+# Initialize public datasets from file or create empty dictionary
+def load_public_datasets():
+    try:
+        if os.path.exists(PUBLIC_DATASETS_FILE):
+            with open(PUBLIC_DATASETS_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+    except Exception:
+        return {}
+
+# Save public datasets to file
+def save_public_datasets(public_datasets):
+    with open(PUBLIC_DATASETS_FILE, 'w') as f:
+        json.dump(public_datasets, f)
 
 @app.post("/connect")
 def test_connection(connection: DatabaseConnection):
@@ -139,6 +163,28 @@ def import_table(import_data: TableImport):
         return dataset
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error importing table: {str(e)}")
+
+# New endpoints for public datasets
+@app.get("/public-datasets")
+def get_public_datasets():
+    public_datasets = load_public_datasets()
+    return {"datasets": list(public_datasets.values())}
+
+@app.post("/public-datasets/{dataset_id}")
+def add_public_dataset(dataset_id: str, dataset: dict = Body(...)):
+    public_datasets = load_public_datasets()
+    public_datasets[dataset_id] = dataset
+    save_public_datasets(public_datasets)
+    return {"success": True}
+
+@app.delete("/public-datasets/{dataset_id}")
+def remove_public_dataset(dataset_id: str):
+    public_datasets = load_public_datasets()
+    if dataset_id in public_datasets:
+        del public_datasets[dataset_id]
+        save_public_datasets(public_datasets)
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Dataset not found")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
