@@ -36,9 +36,10 @@ import {
   getAllValidationResults, 
   getImportedDatasets, 
   DatasetType, 
-  ValidationResult 
+  ValidationResult,
+  refreshImportedDatasets
 } from "@/services/api";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/hooks/use-toast";
 
 const getValidationStatusCounts = (validationResults: Record<string, ValidationResult[]>) => {
   let passCount = 0;
@@ -79,10 +80,10 @@ const Dashboard = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [datasetsData, validationResultsData] = await Promise.all([
-        getDatasets(),
-        getAllValidationResults()
-      ]);
+      const datasetsData = await getDatasets();
+      const validationResultsData = await getAllValidationResults();
+      
+      const refreshedDbDatasets = await refreshImportedDatasets();
       
       setDatasets(datasetsData);
       setValidationResults(validationResultsData);
@@ -201,11 +202,11 @@ const Dashboard = () => {
                 <div className="mt-1 flex text-xs text-slate-500">
                   <span className="flex items-center text-green-600">
                     <CheckCircle className="mr-1 h-3 w-3" />
-                    {datasetStats.validatedCount} Validated
+                    {datasets.filter(d => d.status === "Validated").length} Validated
                   </span>
                   <span className="ml-2 flex items-center text-amber-600">
                     <AlertTriangle className="mr-1 h-3 w-3" />
-                    {datasetStats.issuesFoundCount} Issues
+                    {datasets.filter(d => d.status === "Issues Found").length} Issues
                   </span>
                 </div>
               </CardContent>
@@ -280,11 +281,14 @@ const Dashboard = () => {
             </Card>
             
             <Card className="col-span-2">
-              <CardHeader className="pb-2">
+              <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-slate-500">Latest Database Added</CardTitle>
+                  <CardTitle className="text-lg">Latest Database Added</CardTitle>
                   <Database className="h-5 w-5 text-slate-400" />
                 </div>
+                <CardDescription>
+                  Most recently added database dataset
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {latestDatabaseDataset ? (
@@ -352,11 +356,14 @@ const Dashboard = () => {
             </Card>
             
             <Card className="col-span-2">
-              <CardHeader className="pb-2">
+              <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium text-slate-500">Latest Validation</CardTitle>
+                  <CardTitle className="text-lg">Latest Validation</CardTitle>
                   <Shield className="h-5 w-5 text-slate-400" />
                 </div>
+                <CardDescription>
+                  Most recent validation results
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {latestValidation && datasets.find(d => d.id === latestValidation.datasetId) ? (() => {
@@ -437,8 +444,8 @@ const Dashboard = () => {
             </Card>
           </div>
           
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            <Card className="lg:col-span-1">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Datasets Status</CardTitle>
@@ -491,7 +498,7 @@ const Dashboard = () => {
               </CardFooter>
             </Card>
             
-            <Card className="lg:col-span-1">
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Validation Results</CardTitle>
@@ -539,84 +546,6 @@ const Dashboard = () => {
               <CardFooter className="justify-center border-t bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
                 <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
                   View Validation Reports
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </CardFooter>
-            </Card>
-            
-            <Card className="lg:col-span-1">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Recent Activity</CardTitle>
-                  <BarChart3 className="h-5 w-5 text-slate-400" />
-                </div>
-                <CardDescription>
-                  Latest validation runs
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recentValidations.length === 0 ? (
-                  <div className="flex h-64 flex-col items-center justify-center">
-                    <ClockIcon className="mb-4 h-12 w-12 text-slate-300" />
-                    <p className="text-center text-sm text-slate-500">
-                      No recent activity. <br />
-                      Run validations to see activity here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {recentValidations.slice(0, 5).map(validation => {
-                      const dataset = datasets.find(d => d.id === validation.datasetId);
-                      if (!dataset) return null;
-                      
-                      const passCount = validation.results.filter(r => r.status === "Pass").length;
-                      const warningCount = validation.results.filter(r => r.status === "Warning").length;
-                      const failCount = validation.results.filter(r => r.status === "Fail").length;
-                      const validationDate = new Date(validation.results[0].timestamp);
-                      
-                      return (
-                        <div key={validation.datasetId} className="rounded-lg border p-3">
-                          <div className="mb-2 flex items-start justify-between">
-                            <div>
-                              <h4 className="font-medium">{dataset.name}</h4>
-                              <p className="text-xs text-slate-500">{dataset.type} · {dataset.size}</p>
-                            </div>
-                            <div className={`rounded-full px-2 py-0.5 text-xs ${
-                              dataset.status === 'Validated' 
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                : dataset.status === 'Issues Found'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
-                            }`}>
-                              {dataset.status}
-                            </div>
-                          </div>
-                          <div className="flex items-center text-xs text-slate-500">
-                            <span className="flex items-center text-green-600">
-                              <CheckCircle className="mr-1 h-3 w-3" />
-                              {passCount} Pass
-                            </span>
-                            <span className="ml-2 flex items-center text-amber-600">
-                              <AlertTriangle className="mr-1 h-3 w-3" />
-                              {warningCount} Warning
-                            </span>
-                            <span className="ml-2 flex items-center text-red-600">
-                              <XCircle className="mr-1 h-3 w-3" />
-                              {failCount} Fail
-                            </span>
-                          </div>
-                          <div className="mt-2 text-xs text-slate-500">
-                            {validationDate.toLocaleDateString()} {validationDate.toLocaleTimeString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="justify-center border-t bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
-                <Button variant="ghost" size="sm" onClick={() => navigate('/validation')}>
-                  Run New Validation
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardFooter>
