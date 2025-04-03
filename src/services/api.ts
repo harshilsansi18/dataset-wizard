@@ -13,7 +13,9 @@ import {
   getImportedDatasets,
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
-  clearDatabaseData
+  clearDatabaseData,
+  toggleRealDatabaseConnection,
+  shouldUseRealDatabaseConnection
 } from './databaseService';
 
 // Re-export all service functions to streamline imports
@@ -43,7 +45,9 @@ export {
   getImportedDatasets,
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
-  clearDatabaseData
+  clearDatabaseData,
+  toggleRealDatabaseConnection,
+  shouldUseRealDatabaseConnection
 };
 
 // Re-export types
