@@ -214,7 +214,7 @@ export const importTableAsDataset = async (
     const dataset: DatasetType = {
       id: `db_${tableName}_${Date.now()}`,
       name: tableName,
-      type: "Database",
+      type: "CSV",
       columnCount,
       rowCount,
       dateUploaded: new Date().toISOString().split('T')[0],
@@ -301,6 +301,7 @@ export const getImportedDatasets = (): DatasetType[] => {
 
 // Function to refresh the list of imported datasets
 export const refreshImportedDatasets = (): DatasetType[] => {
+  console.log("Refreshing imported datasets:", importedDatasets.length);
   return [...importedDatasets];
 };
 

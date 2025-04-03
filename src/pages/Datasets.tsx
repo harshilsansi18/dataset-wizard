@@ -311,7 +311,11 @@ const Datasets = () => {
 
       <Tabs 
         value={activeTab} 
-        onValueChange={setActiveTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab);
+          // Refresh datasets when changing tabs
+          fetchDatasets();
+        }}
         className="space-y-4"
       >
         <div className="flex justify-between items-center">

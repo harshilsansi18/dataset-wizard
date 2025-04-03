@@ -132,6 +132,9 @@ const DatabaseConnection = () => {
     setIsImporting(tableName);
     try {
       const dataset = await importTableAsDataset(tableName);
+      // Force refresh the dataset list in memory
+      refreshImportedDatasets();
+      
       toast({
         title: "Table Imported",
         description: `Successfully imported ${tableName} as dataset with ${dataset.rowCount} rows`,
