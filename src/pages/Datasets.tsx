@@ -62,8 +62,30 @@ const Datasets = () => {
   const fetchDatasets = async () => {
     setLoading(true);
     try {
-      const data = await getDatasets();
-      setDatasets(data);
+      const fileData = await getDatasets();
+      const dbData = await refreshImportedDatasets(); // Use refreshImportedDatasets to get latest data
+      
+      // Remove duplicates if any
+      const allDatasetIds = new Set();
+      const allDatasets = [];
+      
+      // Add file datasets first
+      for (const dataset of fileData) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
+      // Add database datasets ensuring no duplicates
+      for (const dataset of dbData) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
+      setDatasets(allDatasets);
     } catch (error) {
       console.error("Error fetching datasets:", error);
       toast({

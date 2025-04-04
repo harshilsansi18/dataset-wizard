@@ -1,3 +1,4 @@
+
 import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
@@ -10,7 +11,6 @@ type PostgresConfig = {
   password: string;
   isConnected: boolean;
   lastConnected: string | null;
-  isRealConnection: boolean;
   connectionUrl: string;
 };
 
@@ -23,7 +23,6 @@ export const postgresConfig: PostgresConfig = {
   password: "",
   isConnected: false,
   lastConnected: null,
-  isRealConnection: false,
   get connectionUrl() {
     return `${this.host}:${this.port}/${this.database}`;
   }
@@ -33,35 +32,12 @@ export const postgresConfig: PostgresConfig = {
 let importedDatasets: DatasetType[] = [];
 
 // Configuration for database service
-const USE_REAL_DB_KEY = "use_real_postgres_connection";
 const API_URL = "http://localhost:8000";  // Change this to your FastAPI backend URL
 
-// Function to determine if we should use real database connections
-export const shouldUseRealDatabaseConnection = (): boolean => {
-  return localStorage.getItem(USE_REAL_DB_KEY) === "true";
-};
-
-// Function to toggle between mock and real database connections
-export const toggleRealDatabaseConnection = (useReal: boolean): void => {
-  localStorage.setItem(USE_REAL_DB_KEY, useReal ? "true" : "false");
-  
-  toast({
-    title: useReal ? "Using real PostgreSQL connection" : "Using mock PostgreSQL connection",
-    description: useReal 
-      ? "Now connecting to your actual database" 
-      : "Now using simulated database functionality",
-  });
-};
-
-// Initialize database connection based on stored preference
+// Initialize database connection from localStorage if available
 export const initDatabaseConnection = (): void => {
-  const useReal = shouldUseRealDatabaseConnection();
-  console.log(`Database mode: ${useReal ? "Real connection" : "Mock connection"}`);
-  
-  // Set the real connection flag
-  postgresConfig.isRealConnection = useReal;
-  
-  // Clear any stored datasets when switching modes
+  console.log("Initializing database connection");
+  // Clear any stored datasets when initializing
   importedDatasets = [];
 };
 
@@ -70,41 +46,33 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
   // Update the config with any provided values
   Object.assign(postgresConfig, config);
   
-  if (shouldUseRealDatabaseConnection()) {
-    try {
-      const response = await fetch(`${API_URL}/connect`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          host: postgresConfig.host,
-          port: parseInt(postgresConfig.port, 10),
-          database: postgresConfig.database,
-          user: postgresConfig.user,
-          password: postgresConfig.password
-        }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to connect to database');
-      }
-      
-      const result = await response.json();
-      postgresConfig.isConnected = result.success;
-      postgresConfig.lastConnected = new Date().toISOString();
-      return result.success;
-    } catch (error) {
-      console.error("Database connection error:", error);
-      throw error;
+  try {
+    const response = await fetch(`${API_URL}/connect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        host: postgresConfig.host,
+        port: parseInt(postgresConfig.port, 10),
+        database: postgresConfig.database,
+        user: postgresConfig.user,
+        password: postgresConfig.password
+      }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to connect to database');
     }
-  } else {
-    // Mock connection logic (always succeeds after delay)
-    await new Promise(resolve => setTimeout(resolve, 800));
-    postgresConfig.isConnected = true;
+    
+    const result = await response.json();
+    postgresConfig.isConnected = result.success;
     postgresConfig.lastConnected = new Date().toISOString();
-    return true;
+    return result.success;
+  } catch (error) {
+    console.error("Database connection error:", error);
+    throw error;
   }
 };
 
@@ -117,44 +85,32 @@ export const disconnectDatabase = async (): Promise<void> => {
 
 // Get all tables from PostgreSQL database
 export const getDatabaseTables = async (config = postgresConfig): Promise<string[]> => {
-  if (shouldUseRealDatabaseConnection()) {
-    try {
-      const queryParams = new URLSearchParams({
-        host: config.host,
-        port: config.port,
-        database: config.database,
-        user: config.user,
-        ...(config.password && { password: config.password }),
-      });
-      
-      const response = await fetch(`${API_URL}/tables?${queryParams}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to fetch tables');
-      }
-      
-      const result = await response.json();
-      return result.tables;
-    } catch (error) {
-      console.error("Error fetching tables:", error);
-      throw error;
+  try {
+    const queryParams = new URLSearchParams({
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+      ...(config.password && { password: config.password }),
+    });
+    
+    const response = await fetch(`${API_URL}/tables?${queryParams}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch tables');
     }
-  } else {
-    // Mock tables (after delay)
-    await new Promise(resolve => setTimeout(resolve, 800));
-    return [
-      "customers",
-      "orders",
-      "products",
-      "employees",
-      "suppliers"
-    ];
+    
+    const result = await response.json();
+    return result.tables;
+  } catch (error) {
+    console.error("Error fetching tables:", error);
+    throw error;
   }
 };
 
@@ -163,133 +119,33 @@ export const importTableAsDataset = async (
   tableName: string,
   config = postgresConfig
 ): Promise<DatasetType> => {
-  if (shouldUseRealDatabaseConnection()) {
-    try {
-      const response = await fetch(`${API_URL}/import`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          host: config.host,
-          port: parseInt(config.port, 10),
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          table: tableName
-        }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to import table');
-      }
-      
-      const dataset = await response.json();
-      importedDatasets.push(dataset);
-      return dataset;
-    } catch (error) {
-      console.error("Error importing table:", error);
-      throw error;
-    }
-  } else {
-    // Mock dataset creation (after delay)
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    
-    const columnCount = Math.floor(Math.random() * 6) + 3;
-    const rowCount = Math.floor(Math.random() * 200) + 50;
-    
-    // Generate mock headers based on table name
-    const mockHeaders = getMockHeaders(tableName, columnCount);
-    
-    // Generate mock data rows
-    const content = Array.from({ length: rowCount }, (_, rowIndex) => {
-      const row: Record<string, any> = {};
-      mockHeaders.forEach(header => {
-        row[header] = getMockValue(header, rowIndex);
-      });
-      return row;
+  try {
+    const response = await fetch(`${API_URL}/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        host: config.host,
+        port: parseInt(config.port, 10),
+        database: config.database,
+        user: config.user,
+        password: config.password,
+        table: tableName
+      }),
     });
     
-    const dataset: DatasetType = {
-      id: `db_${tableName}_${Date.now()}`,
-      name: tableName,
-      type: "CSV",
-      columnCount,
-      rowCount,
-      dateUploaded: new Date().toISOString().split('T')[0],
-      status: "Not Validated",
-      size: `${rowCount * columnCount * 10} B`,
-      lastUpdated: new Date().toISOString().split('T')[0],
-      content,
-      headers: mockHeaders,
-      source: {
-        type: "database",
-        connectionName: config.database,
-        tableName
-      }
-    };
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to import table');
+    }
     
+    const dataset = await response.json();
     importedDatasets.push(dataset);
     return dataset;
-  }
-};
-
-// Helper function to generate mock headers
-const getMockHeaders = (tableName: string, count: number): string[] => {
-  const baseHeaders: Record<string, string[]> = {
-    customers: ["id", "name", "email", "address", "city", "country", "phone"],
-    orders: ["id", "customer_id", "order_date", "status", "total", "shipping_method"],
-    products: ["id", "name", "category", "price", "stock", "rating"],
-    employees: ["id", "name", "department", "title", "hire_date", "salary"],
-    suppliers: ["id", "name", "contact", "phone", "city", "country"]
-  };
-  
-  // Use table-specific headers or generic ones
-  const headers = baseHeaders[tableName as keyof typeof baseHeaders] || 
-    ["id", "name", "description", "created_at", "updated_at", "status"];
-  
-  // Return requested number of headers (minimum 3)
-  return headers.slice(0, Math.max(count, 3));
-};
-
-// Helper function to generate mock values based on header
-const getMockValue = (header: string, index: number): any => {
-  switch (header) {
-    case "id":
-      return index + 1;
-    case "customer_id":
-    case "product_id":
-      return Math.floor(Math.random() * 100) + 1;
-    case "name":
-      return `${["Alpha", "Beta", "Gamma", "Delta", "Omega"][index % 5]} ${["Corp", "Inc", "Ltd", "LLC", "Group"][Math.floor(index / 5) % 5]}`;
-    case "email":
-      return `user${index}@example.com`;
-    case "price":
-    case "total":
-    case "salary":
-      return (Math.random() * 1000).toFixed(2);
-    case "stock":
-      return Math.floor(Math.random() * 100);
-    case "order_date":
-    case "hire_date":
-    case "created_at":
-    case "updated_at":
-      const date = new Date();
-      date.setDate(date.getDate() - Math.floor(Math.random() * 365));
-      return date.toISOString().split('T')[0];
-    case "status":
-      return ["Active", "Pending", "Completed", "Cancelled"][index % 4];
-    case "rating":
-      return (Math.random() * 5).toFixed(1);
-    case "city":
-      return ["New York", "London", "Tokyo", "Paris", "Berlin"][index % 5];
-    case "country":
-      return ["USA", "UK", "Japan", "France", "Germany"][index % 5];
-    case "phone":
-      return `+1 555-${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`;
-    default:
-      return `Value ${index}`;
+  } catch (error) {
+    console.error("Error importing table:", error);
+    throw error;
   }
 };
 
@@ -309,19 +165,7 @@ export const refreshImportedDatasets = (): DatasetType[] => {
 export const ensureImportedDatasetsAvailable = async (
   config = postgresConfig
 ): Promise<DatasetType[]> => {
-  if (importedDatasets.length === 0) {
-    try {
-      const tables = await getDatabaseTables(config);
-      
-      // Import first table as sample if we're using mock connection
-      if (!shouldUseRealDatabaseConnection() && tables.length > 0) {
-        await importTableAsDataset(tables[0], config);
-      }
-      
-    } catch (error) {
-      console.error("Error ensuring datasets:", error);
-    }
-  }
+  // Just return the current datasets
   return [...importedDatasets];
 };
 
@@ -330,5 +174,22 @@ export const clearDatabaseData = (): void => {
   importedDatasets = [];
   postgresConfig.isConnected = false;
   postgresConfig.lastConnected = null;
-  postgresConfig.isRealConnection = false;
 };
+
+// Validate the Postgres connection parameters
+export const validateConnectionParams = (
+  host: string,
+  port: string,
+  database: string,
+  user: string,
+  password: string
+): string | null => {
+  if (!host.trim()) return "Host is required";
+  if (!port.trim()) return "Port is required";
+  if (isNaN(parseInt(port))) return "Port must be a number";
+  if (!database.trim()) return "Database name is required";
+  if (!user.trim()) return "Username is required";
+  if (!password.trim()) return "Password is required";
+  return null;
+};
+

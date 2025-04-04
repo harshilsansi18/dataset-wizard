@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Database, Server, Table, Download, Loader2, Clock, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { 
@@ -17,8 +16,8 @@ import {
   postgresConfig,
   initDatabaseConnection,
   clearDatabaseData,
-  toggleRealDatabaseConnection,
-  shouldUseRealDatabaseConnection,
+  refreshImportedDatasets,
+  validateConnectionParams
 } from "@/services/api";
 
 const formatTimeSince = (isoString: string | null): string => {
@@ -51,15 +50,11 @@ const DatabaseConnection = () => {
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [lastConnected, setLastConnected] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
-  const [useRealConnection, setUseRealConnection] = useState(false);
 
   useEffect(() => {
     initDatabaseConnection();
     
     // Initialize UI based on current connection state
-    const useReal = shouldUseRealDatabaseConnection();
-    setUseRealConnection(useReal);
-    
     if (postgresConfig.isConnected) {
       setHost(postgresConfig.host);
       setPort(postgresConfig.port);
@@ -72,10 +67,19 @@ const DatabaseConnection = () => {
   }, []);
 
   const handleConnect = async () => {
-    if (!host || !database || !user || !password) {
+    // Validate connection parameters
+    const validationError = validateConnectionParams(
+      host,
+      port,
+      database,
+      user,
+      password
+    );
+    
+    if (validationError) {
       toast({
-        title: "Missing Fields",
-        description: "Please fill in all required connection fields",
+        title: "Validation Error",
+        description: validationError,
         variant: "destructive"
       });
       return;
@@ -83,20 +87,19 @@ const DatabaseConnection = () => {
 
     setIsConnecting(true);
     try {
-      // Toggle real connection if needed
-      if (useRealConnection !== shouldUseRealDatabaseConnection()) {
-        toggleRealDatabaseConnection(useRealConnection);
-      }
-      
       await connectToDatabase({
         host,
-        port, // Already a string, no need to convert
+        port,
         database,
         user,
         password
       });
       
       setLastConnected(postgresConfig.lastConnected);
+      toast({
+        title: "Connected",
+        description: `Successfully connected to ${database} database`,
+      });
       
       handleGetTables();
     } catch (error) {
@@ -163,7 +166,6 @@ const DatabaseConnection = () => {
       clearDatabaseData();
       setTables([]);
       setLastConnected(null);
-      setUseRealConnection(false);
       setIsResetting(false);
     }, 500);
   };
@@ -173,7 +175,7 @@ const DatabaseConnection = () => {
       <CardHeader>
         <CardTitle className="flex items-center">
           <Database className="mr-2 h-5 w-5 text-blue-600" />
-          Database Connection
+          PostgreSQL Connection
         </CardTitle>
         <CardDescription>
           Connect to PostgreSQL database to import tables as datasets
@@ -233,25 +235,12 @@ const DatabaseConnection = () => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-2 mt-2">
-              <Switch 
-                id="use-real-connection" 
-                checked={useRealConnection}
-                onCheckedChange={setUseRealConnection}
-              />
-              <Label htmlFor="use-real-connection">
-                Use real PostgreSQL connection
-              </Label>
+            <div className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+              <p className="text-sm">
+                <strong>Note:</strong> For PostgreSQL connections, ensure the FastAPI backend is running with:
+                <code className="ml-2 p-1 bg-amber-100 dark:bg-amber-900 rounded">cd fastapi-backend && uvicorn app:app --reload</code>
+              </p>
             </div>
-            
-            {useRealConnection && (
-              <div className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-                <p className="text-sm">
-                  <strong>Note:</strong> For real PostgreSQL connections, ensure the FastAPI backend is running with:
-                  <code className="ml-2 p-1 bg-amber-100 dark:bg-amber-900 rounded">cd fastapi-backend && uvicorn app:app --reload</code>
-                </p>
-              </div>
-            )}
             
             <Button 
               className="w-full" 
@@ -270,27 +259,6 @@ const DatabaseConnection = () => {
                 </>
               )}
             </Button>
-            
-            <Separator className="my-4" />
-            
-            <div className="text-center">
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                onClick={handleClearData}
-                disabled={isResetting}
-              >
-                {isResetting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
-                )}
-                Reset All Database Data
-              </Button>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Clear all database connections and imported datasets from local storage
-              </p>
-            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -309,8 +277,8 @@ const DatabaseConnection = () => {
                     )}
                   </div>
                 </div>
-                <Badge variant={postgresConfig.isRealConnection ? "default" : "outline"} className="ml-2">
-                  {postgresConfig.isRealConnection ? "Real Connection" : "Mock Connection"}
+                <Badge variant="default" className="ml-2">
+                  PostgreSQL
                 </Badge>
               </div>
             </div>

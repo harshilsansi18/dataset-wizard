@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { getDatasets, runValidation, DatasetType, ValidationResult, getImportedDatasets } from "@/services/api";
+import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets } from "@/services/api";
 
 const Validation = () => {
   const navigate = useNavigate();
@@ -52,12 +52,28 @@ const Validation = () => {
     setLoading(true);
     try {
       const fileDatasets = await getDatasets();
-      const dbDatasets = await getImportedDatasets();
+      const dbDatasets = await refreshImportedDatasets();
       
       console.log("File datasets:", fileDatasets.length);
       console.log("Database datasets:", dbDatasets.length);
       
-      const allDatasets = [...fileDatasets, ...dbDatasets];
+      const allDatasetIds = new Set();
+      const allDatasets = [];
+      
+      for (const dataset of fileDatasets) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
+      for (const dataset of dbDatasets) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
       setDatasets(allDatasets);
       
       console.log("Validation page loaded datasets:", allDatasets.length);
