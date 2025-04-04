@@ -1,84 +1,80 @@
 
 # FastAPI PostgreSQL Backend
 
-This directory contains a FastAPI backend service for connecting to PostgreSQL databases.
+This is a FastAPI backend service that provides PostgreSQL database connectivity for the Data Quality Tool.
 
-## Project Structure
+## Getting Started
+
+### Prerequisites
+
+- Python 3.7+ installed
+- PostgreSQL database server running
+- Basic knowledge of PostgreSQL
+
+### Setup Instructions
+
+#### 1. Environment Setup
+
+First, create a virtual environment and install dependencies:
+
+**Linux/macOS:**
+```bash
+# Make the start script executable
+chmod +x start_backend.sh
+
+# Run the start script
+./start_backend.sh
+```
+
+**Windows:**
+```cmd
+# Run the start script
+start_backend.bat
+```
+
+This will:
+1. Create a Python virtual environment
+2. Install required dependencies
+3. Copy the `.env.example` file to `.env` if it doesn't exist
+4. Start the FastAPI server
+
+#### 2. Configure Database Connection
+
+Edit the `.env` file with your PostgreSQL credentials:
 
 ```
-fastapi-backend/
-├── app.py           # Main FastAPI application entry point
-├── config.py        # Configuration management (environment variables)
-├── database.py      # Database connection handling
-├── models.py        # Pydantic data models
-├── routes.py        # API endpoints
-├── services.py      # Business logic
-├── requirements.txt # Python dependencies
-└── .env.example     # Example environment variables
+POSTGRES_DEFAULT_HOST=localhost
+POSTGRES_DEFAULT_PORT=5432
+POSTGRES_DEFAULT_USER=postgres
+POSTGRES_DEFAULT_PASSWORD=your_password
+POSTGRES_DEFAULT_DATABASE=your_database
 ```
 
-## Setup Instructions
+### API Endpoints
 
-1. Make sure you have Python installed (version 3.7+)
+- **POST /connect**: Test database connection
+- **GET /tables**: Get list of tables from database
+- **POST /import**: Import table data as dataset
+- **GET /public-datasets**: Get all public datasets
+- **POST /public-datasets/{dataset_id}**: Add a dataset to public datasets
+- **DELETE /public-datasets/{dataset_id}**: Remove a dataset from public datasets
 
-2. Create a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+### Troubleshooting
 
-3. Install the required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
+- **Connection Refused Error**: Make sure your PostgreSQL server is running and accessible
+- **Authentication Error**: Check the username and password in your `.env` file
+- **Database Not Found**: Ensure the database name is correct in your `.env` file
+- **Port Already in Use**: Change the PORT value in `.env` if port 8000 is already in use
 
-4. Create a .env file from the template:
-   ```bash
-   cp .env.example .env
-   ```
+### Development
 
-5. Edit the .env file with your PostgreSQL connection details
+To manually start the server without the script:
 
-6. Run the FastAPI application:
-   ```bash
-   python app.py
-   # Or alternatively:
-   # uvicorn app:app --reload
-   ```
+```bash
+# Activate virtual environment
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
 
-7. The backend will be available at http://localhost:8000
-   - API documentation is available at http://localhost:8000/docs
-
-## API Endpoints
-
-- `GET /health` - Health check endpoint
-- `POST /connect` - Test connection to database
-- `GET /tables` - Get all tables in database
-- `POST /import` - Import table as dataset
-- `GET /public-datasets` - Get all public datasets
-- `POST /public-datasets/{dataset_id}` - Add a dataset to public datasets
-- `DELETE /public-datasets/{dataset_id}` - Remove a dataset from public datasets
-
-## Configuration
-
-- Default configuration uses environment variables from the .env file
-- Server runs on host/port specified in .env (defaults to 0.0.0.0:8000)
-
-## Troubleshooting
-
-- If you get a "Connection refused" error, make sure your PostgreSQL server is running
-- Check that the hostname, port, database name, username, and password are correct
-- For local development, try using "localhost" as the hostname
-- If using a remote PostgreSQL server, ensure that remote connections are allowed
-- Check PostgreSQL logs for connection errors
-- Make sure the database user has proper privileges
-
-## Security Considerations
-
-- This is a development setup. For production, consider:
-  - Adding proper authentication with JWT or OAuth2
-  - Implementing rate limiting
-  - Setting up proper CORS headers
-  - Using HTTPS
-  - Implementing database connection pooling
-  - Storing sensitive credentials securely
+# Start the server
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```

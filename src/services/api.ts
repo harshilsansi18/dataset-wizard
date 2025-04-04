@@ -14,7 +14,8 @@ import {
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
-  validateConnectionParams
+  validateConnectionParams,
+  API_URL
 } from './databaseService';
 
 // Re-export all service functions to streamline imports
@@ -45,7 +46,8 @@ export {
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
-  validateConnectionParams
+  validateConnectionParams,
+  API_URL
 };
 
 // Re-export types

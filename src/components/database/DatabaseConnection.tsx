@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Database, Server, Table, Download, Loader2, Clock, RefreshCw, Trash2 } from "lucide-react";
+import { Database, Server, Table, Download, Loader2, Clock, RefreshCw, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { 
   connectToDatabase, 
@@ -17,7 +16,8 @@ import {
   initDatabaseConnection,
   clearDatabaseData,
   refreshImportedDatasets,
-  validateConnectionParams
+  validateConnectionParams,
+  API_URL
 } from "@/services/api";
 
 const formatTimeSince = (isoString: string | null): string => {
@@ -50,11 +50,21 @@ const DatabaseConnection = () => {
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [lastConnected, setLastConnected] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     initDatabaseConnection();
     
-    // Initialize UI based on current connection state
+    fetch(`${API_URL}/health`)
+      .then(response => {
+        setBackendAvailable(response.ok);
+        console.log("Backend is available:", response.ok);
+      })
+      .catch(error => {
+        console.error("Backend check failed:", error);
+        setBackendAvailable(false);
+      });
+    
     if (postgresConfig.isConnected) {
       setHost(postgresConfig.host);
       setPort(postgresConfig.port);
@@ -67,7 +77,6 @@ const DatabaseConnection = () => {
   }, []);
 
   const handleConnect = async () => {
-    // Validate connection parameters
     const validationError = validateConnectionParams(
       host,
       port,
@@ -135,7 +144,6 @@ const DatabaseConnection = () => {
     setIsImporting(tableName);
     try {
       const dataset = await importTableAsDataset(tableName);
-      // Force refresh the dataset list in memory
       refreshImportedDatasets();
       
       toast({
@@ -170,6 +178,29 @@ const DatabaseConnection = () => {
     }, 500);
   };
 
+  const renderBackendWarning = () => {
+    if (backendAvailable === false) {
+      return (
+        <div className="rounded-md bg-red-50 p-3 text-red-800 dark:bg-red-900/20 dark:text-red-400 mb-4">
+          <div className="flex">
+            <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Backend server not available</p>
+              <p className="text-sm mt-1">
+                The FastAPI backend server at {API_URL} is not responding. Please start the backend server.
+              </p>
+              <p className="text-sm mt-2 font-mono bg-red-100 dark:bg-red-900/40 p-2 rounded">
+                cd fastapi-backend && ./start_backend.sh <span className="text-xs">(Linux/Mac)</span><br />
+                cd fastapi-backend && start_backend.bat <span className="text-xs">(Windows)</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -182,6 +213,8 @@ const DatabaseConnection = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {renderBackendWarning()}
+        
         {!postgresConfig.isConnected ? (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -238,14 +271,14 @@ const DatabaseConnection = () => {
             <div className="rounded-md bg-amber-50 p-3 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
               <p className="text-sm">
                 <strong>Note:</strong> For PostgreSQL connections, ensure the FastAPI backend is running with:
-                <code className="ml-2 p-1 bg-amber-100 dark:bg-amber-900 rounded">cd fastapi-backend && uvicorn app:app --reload</code>
+                <code className="ml-2 p-1 bg-amber-100 dark:bg-amber-900 rounded">cd fastapi-backend && ./start_backend.sh</code>
               </p>
             </div>
             
             <Button 
               className="w-full" 
               onClick={handleConnect}
-              disabled={isConnecting}
+              disabled={isConnecting || backendAvailable === false}
             >
               {isConnecting ? (
                 <>

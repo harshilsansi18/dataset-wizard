@@ -1,4 +1,3 @@
-
 import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
@@ -32,7 +31,9 @@ export const postgresConfig: PostgresConfig = {
 let importedDatasets: DatasetType[] = [];
 
 // Configuration for database service
-const API_URL = "http://localhost:8000";  // Change this to your FastAPI backend URL
+// The API_URL can be modified based on environment or .env variables
+// Default to localhost:8000 which is FastAPI's default
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";  
 
 // Initialize database connection from localStorage if available
 export const initDatabaseConnection = (): void => {
@@ -72,6 +73,7 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
   
   try {
     console.log("Connecting to database:", postgresConfig.host);
+    console.log("Using API URL:", API_URL);
     
     const response = await fetch(`${API_URL}/connect`, {
       method: 'POST',
@@ -102,6 +104,10 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
     return result.success;
   } catch (error) {
     console.error("Database connection error:", error);
+    // Check if the error is related to backend unavailability
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Backend server not available. Make sure the FastAPI server is running.');
+    }
     throw error;
   }
 };
