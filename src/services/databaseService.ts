@@ -37,8 +37,32 @@ const API_URL = "http://localhost:8000";  // Change this to your FastAPI backend
 // Initialize database connection from localStorage if available
 export const initDatabaseConnection = (): void => {
   console.log("Initializing database connection");
-  // Clear any stored datasets when initializing
-  importedDatasets = [];
+  try {
+    // Check if we have stored connection info
+    const storedConfig = localStorage.getItem("postgres_config");
+    if (storedConfig) {
+      const config = JSON.parse(storedConfig);
+      
+      // Update the config object
+      Object.assign(postgresConfig, config);
+      
+      console.log("Loaded stored database configuration");
+      
+      // Attempt to reconnect if previously connected
+      if (postgresConfig.isConnected) {
+        connectToDatabase(postgresConfig)
+          .then(() => console.log("Reconnected to database"))
+          .catch(() => {
+            // If reconnection fails, reset the connected state
+            postgresConfig.isConnected = false;
+            localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
+          });
+      }
+    }
+  } catch (error) {
+    console.error("Error initializing database connection:", error);
+    clearDatabaseData();
+  }
 };
 
 // Test connection to PostgreSQL database
@@ -47,6 +71,8 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
   Object.assign(postgresConfig, config);
   
   try {
+    console.log("Connecting to database:", postgresConfig.host);
+    
     const response = await fetch(`${API_URL}/connect`, {
       method: 'POST',
       headers: {
@@ -69,6 +95,10 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
     const result = await response.json();
     postgresConfig.isConnected = result.success;
     postgresConfig.lastConnected = new Date().toISOString();
+    
+    // Store the updated config in localStorage
+    localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
+    
     return result.success;
   } catch (error) {
     console.error("Database connection error:", error);
@@ -78,14 +108,19 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
 
 // Disconnect from database
 export const disconnectDatabase = async (): Promise<void> => {
-  // In a real implementation, you might want to close connections
+  console.log("Disconnecting from database");
   postgresConfig.isConnected = false;
   importedDatasets = [];
+  
+  // Update localStorage
+  localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
 };
 
 // Get all tables from PostgreSQL database
 export const getDatabaseTables = async (config = postgresConfig): Promise<string[]> => {
   try {
+    console.log("Getting tables from database:", config.connectionUrl);
+    
     const queryParams = new URLSearchParams({
       host: config.host,
       port: config.port,
@@ -120,6 +155,8 @@ export const importTableAsDataset = async (
   config = postgresConfig
 ): Promise<DatasetType> => {
   try {
+    console.log(`Importing table '${tableName}' as dataset`);
+    
     const response = await fetch(`${API_URL}/import`, {
       method: 'POST',
       headers: {
@@ -156,7 +193,7 @@ export const getImportedDatasets = (): DatasetType[] => {
 };
 
 // Function to refresh the list of imported datasets
-export const refreshImportedDatasets = (): DatasetType[] => {
+export const refreshImportedDatasets = async (): Promise<DatasetType[]> => {
   console.log("Refreshing imported datasets:", importedDatasets.length);
   return [...importedDatasets];
 };
@@ -174,6 +211,9 @@ export const clearDatabaseData = (): void => {
   importedDatasets = [];
   postgresConfig.isConnected = false;
   postgresConfig.lastConnected = null;
+  
+  // Clear from localStorage
+  localStorage.removeItem("postgres_config");
 };
 
 // Validate the Postgres connection parameters
@@ -192,4 +232,3 @@ export const validateConnectionParams = (
   if (!password.trim()) return "Password is required";
   return null;
 };
-
