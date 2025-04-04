@@ -1,7 +1,10 @@
 
 #!/bin/bash
 
-# This script starts the FastAPI backend server
+# Make this script executable with: chmod +x start_backend.sh
+# Then run with: ./start_backend.sh
+
+echo "Starting FastAPI backend server..."
 
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
@@ -33,4 +36,4 @@ fi
 # Start the server
 echo "Starting FastAPI server..."
 echo "API will be available at http://localhost:8000"
-python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
+uvicorn app:app --reload --host 0.0.0.0 --port 8000

@@ -45,4 +45,4 @@ if not exist ".env" (
 REM Start the server
 echo Starting FastAPI server...
 echo API will be available at http://localhost:8000
-python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
