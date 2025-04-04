@@ -43,7 +43,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
-import { getDatasets, downloadDataset, deleteDataset, uploadDataset, DatasetType, toggleDatasetPublicStatus } from "@/services/api";
+import { getDatasets, downloadDataset, deleteDataset, uploadDataset, DatasetType, toggleDatasetPublicStatus, refreshImportedDatasets } from "@/services/api";
 import DatabaseConnection from "@/components/database/DatabaseConnection";
 import PublicDatasets from "@/components/datasets/PublicDatasets";
 
