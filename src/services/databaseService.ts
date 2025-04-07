@@ -3,7 +3,7 @@ import { toast } from "@/hooks/use-toast";
 import { DatasetType } from "./types";
 
 // Define a proper type for PostgreSQL config
-type PostgresConfig = {
+export type PostgresConfig = {
   host: string;
   port: string;
   database: string;
@@ -11,10 +11,14 @@ type PostgresConfig = {
   password: string;
   isConnected: boolean;
   lastConnected: string | null;
+  connectionKey: string | null;
   connectionUrl: string;
 };
 
-// PostgreSQL connection configuration state
+// Active connections store
+export const activeConnections: { [connectionKey: string]: PostgresConfig } = {};
+
+// Default PostgreSQL connection configuration state
 export const postgresConfig: PostgresConfig = {
   host: "localhost",
   port: "5432",
@@ -23,6 +27,7 @@ export const postgresConfig: PostgresConfig = {
   password: "",
   isConnected: false,
   lastConnected: null,
+  connectionKey: null,
   get connectionUrl() {
     return `${this.host}:${this.port}/${this.database}`;
   }
@@ -50,44 +55,51 @@ const detectApiUrl = () => {
 export const API_URL = detectApiUrl();
 console.log('Using API URL:', API_URL);
 
-// Initialize database connection from localStorage if available
+// Initialize database connections from localStorage if available
 export const initDatabaseConnection = (): void => {
-  console.log("Initializing database connection");
+  console.log("Initializing database connections");
   try {
     // Check if we have stored connection info
-    const storedConfig = localStorage.getItem("postgres_config");
-    if (storedConfig) {
-      const config = JSON.parse(storedConfig);
+    const storedConnections = localStorage.getItem("postgres_connections");
+    if (storedConnections) {
+      const connections = JSON.parse(storedConnections);
       
-      // Update the config object
-      Object.assign(postgresConfig, config);
+      // Update the active connections
+      Object.assign(activeConnections, connections);
       
-      console.log("Loaded stored database configuration");
+      console.log("Loaded stored database configurations:", Object.keys(activeConnections).length);
       
-      // Attempt to reconnect if previously connected
-      if (postgresConfig.isConnected) {
-        connectToDatabase(postgresConfig)
-          .then(() => console.log("Reconnected to database"))
-          .catch(() => {
-            // If reconnection fails, reset the connected state
-            postgresConfig.isConnected = false;
-            localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
-          });
-      }
+      // Attempt to reconnect to all previously connected databases
+      Object.values(activeConnections).forEach(config => {
+        if (config.isConnected) {
+          connectToDatabase(config)
+            .then(() => console.log("Reconnected to database:", config.connectionUrl))
+            .catch(() => {
+              // If reconnection fails, reset the connected state
+              config.isConnected = false;
+              saveConnections();
+            });
+        }
+      });
     }
   } catch (error) {
-    console.error("Error initializing database connection:", error);
+    console.error("Error initializing database connections:", error);
     clearDatabaseData();
   }
 };
 
+// Save all connections to localStorage
+const saveConnections = (): void => {
+  localStorage.setItem("postgres_connections", JSON.stringify(activeConnections));
+};
+
 // Test connection to PostgreSQL database
-export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<any> => {
-  // Update the config with any provided values
-  Object.assign(postgresConfig, config);
+export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<any> {
+  // Create a copy of the default config
+  const connectionConfig = { ...postgresConfig, ...config };
   
   try {
-    console.log("Connecting to database:", postgresConfig.host);
+    console.log("Connecting to database:", connectionConfig.host);
     console.log("Using API URL:", API_URL);
     
     const response = await fetch(`${API_URL}/connect`, {
@@ -96,11 +108,11 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        host: postgresConfig.host,
-        port: parseInt(postgresConfig.port, 10),
-        database: postgresConfig.database,
-        user: postgresConfig.user,
-        password: postgresConfig.password
+        host: connectionConfig.host,
+        port: parseInt(connectionConfig.port, 10),
+        database: connectionConfig.database,
+        user: connectionConfig.user,
+        password: connectionConfig.password
       }),
     });
     
@@ -136,11 +148,17 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
     
     // Update connection state if successful
     if (result.success) {
-      postgresConfig.isConnected = true;
-      postgresConfig.lastConnected = new Date().toISOString();
+      const connectionKey = result.connectionKey || `${connectionConfig.host}:${connectionConfig.port}/${connectionConfig.database}`;
       
-      // Store the updated config in localStorage
-      localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
+      connectionConfig.isConnected = true;
+      connectionConfig.lastConnected = new Date().toISOString();
+      connectionConfig.connectionKey = connectionKey;
+      
+      // Store in our active connections
+      activeConnections[connectionKey] = { ...connectionConfig };
+      
+      // Store the updated configs in localStorage
+      saveConnections();
     }
     
     return result;
@@ -155,29 +173,39 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
 };
 
 // Disconnect from database
-export const disconnectDatabase = async (): Promise<void> => {
-  console.log("Disconnecting from database");
-  postgresConfig.isConnected = false;
-  importedDatasets = [];
+export const disconnectDatabase = async (connectionKey: string): Promise<void> => {
+  console.log("Disconnecting from database:", connectionKey);
   
-  // Update localStorage
-  localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
+  if (activeConnections[connectionKey]) {
+    try {
+      // Call the backend to disconnect
+      await fetch(`${API_URL}/connect/${connectionKey}`, {
+        method: 'DELETE',
+      });
+      
+      // Remove from our active connections
+      delete activeConnections[connectionKey];
+      
+      // Update localStorage
+      saveConnections();
+      
+      console.log("Successfully disconnected from database:", connectionKey);
+    } catch (error) {
+      console.error("Error disconnecting from database:", error);
+      
+      // Still remove from local state even if backend call fails
+      delete activeConnections[connectionKey];
+      saveConnections();
+    }
+  }
 };
 
 // Get all tables from PostgreSQL database
-export const getDatabaseTables = async (config = postgresConfig): Promise<string[]> => {
+export const getDatabaseTables = async (connectionKey: string): Promise<string[]> => {
   try {
-    console.log("Getting tables from database:", config.connectionUrl);
+    console.log("Getting tables for connection:", connectionKey);
     
-    const queryParams = new URLSearchParams({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      user: config.user,
-      ...(config.password && { password: config.password }),
-    });
-    
-    const response = await fetch(`${API_URL}/tables?${queryParams}`, {
+    const response = await fetch(`${API_URL}/tables?connection_key=${connectionKey}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -200,10 +228,15 @@ export const getDatabaseTables = async (config = postgresConfig): Promise<string
 // Import table as dataset
 export const importTableAsDataset = async (
   tableName: string,
-  config = postgresConfig
+  connectionKey: string
 ): Promise<DatasetType> => {
   try {
-    console.log(`Importing table '${tableName}' as dataset`);
+    console.log(`Importing table '${tableName}' from connection '${connectionKey}'`);
+    
+    const connection = activeConnections[connectionKey];
+    if (!connection) {
+      throw new Error(`Connection '${connectionKey}' not found`);
+    }
     
     const response = await fetch(`${API_URL}/import`, {
       method: 'POST',
@@ -211,11 +244,11 @@ export const importTableAsDataset = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        host: config.host,
-        port: parseInt(config.port, 10),
-        database: config.database,
-        user: config.user,
-        password: config.password,
+        host: connection.host,
+        port: parseInt(connection.port, 10),
+        database: connection.database,
+        user: connection.user,
+        password: connection.password,
         table: tableName
       }),
     });
@@ -247,9 +280,7 @@ export const refreshImportedDatasets = async (): Promise<DatasetType[]> => {
 };
 
 // Ensure datasets are available (lazy load)
-export const ensureImportedDatasetsAvailable = async (
-  config = postgresConfig
-): Promise<DatasetType[]> => {
+export const ensureImportedDatasetsAvailable = async (): Promise<DatasetType[]> => {
   // Just return the current datasets
   return [...importedDatasets];
 };
@@ -257,11 +288,12 @@ export const ensureImportedDatasetsAvailable = async (
 // Clear database data
 export const clearDatabaseData = (): void => {
   importedDatasets = [];
-  postgresConfig.isConnected = false;
-  postgresConfig.lastConnected = null;
+  Object.keys(activeConnections).forEach(key => {
+    activeConnections[key].isConnected = false;
+  });
   
   // Clear from localStorage
-  localStorage.removeItem("postgres_config");
+  localStorage.removeItem("postgres_connections");
 };
 
 // Validate the Postgres connection parameters
@@ -279,4 +311,33 @@ export const validateConnectionParams = (
   if (!user.trim()) return "Username is required";
   if (!password.trim()) return "Password is required";
   return null;
+};
+
+// Get all active connections
+export const getActiveConnections = (): PostgresConfig[] => {
+  return Object.values(activeConnections);
+};
+
+// Validate a dataset
+export const validateDataset = async (datasetId: string): Promise<any> => {
+  try {
+    console.log(`Validating dataset '${datasetId}'`);
+    
+    const response = await fetch(`${API_URL}/validate/${datasetId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to validate dataset');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error validating dataset:", error);
+    throw error;
+  }
 };

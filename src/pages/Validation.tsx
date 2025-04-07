@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets } from "@/services/api";
+import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets, validateDataset } from "@/services/api";
 
 const Validation = () => {
   const navigate = useNavigate();
@@ -148,25 +149,63 @@ const Validation = () => {
     const progressInterval = simulateValidationProgress();
 
     try {
-      const results = await runValidation(
-        selectedDataset, 
-        validationMethod, 
-        validationMethod === 'custom' ? customSQL : undefined
-      );
+      let results;
+      
+      // For database datasets, use the backend validation endpoint
+      const selectedDatasetObj = datasets.find(d => d.id === selectedDataset);
+      
+      if (selectedDatasetObj?.type === "Database") {
+        try {
+          // Call backend validation API
+          const validationResponse = await validateDataset(selectedDataset);
+          
+          if (validationResponse && validationResponse.validation_results) {
+            results = validationResponse.validation_results;
+          } else {
+            // Fallback if validation endpoint doesn't return expected format
+            results = await runValidation(
+              selectedDataset, 
+              validationMethod, 
+              validationMethod === 'custom' ? customSQL : undefined
+            );
+          }
+        } catch (error) {
+          console.error("Database validation error:", error);
+          // Fallback to client-side validation if server validation fails
+          results = await runValidation(
+            selectedDataset, 
+            validationMethod, 
+            validationMethod === 'custom' ? customSQL : undefined
+          );
+        }
+      } else {
+        // For file datasets, use the client-side validation
+        results = await runValidation(
+          selectedDataset, 
+          validationMethod, 
+          validationMethod === 'custom' ? customSQL : undefined
+        );
+      }
       
       setProgress(100);
       clearInterval(progressInterval);
       
       setValidationResults(results);
       
-      const passCount = results.filter(r => r.status === "Pass").length;
-      const warningCount = results.filter(r => r.status === "Warning").length;
-      const failCount = results.filter(r => r.status === "Fail").length;
+      const passCount = results.filter((r: any) => r.status === "Pass").length;
+      const warningCount = results.filter((r: any) => r.status === "Warning").length;
+      const failCount = results.filter((r: any) => r.status === "Fail").length;
       
       toast({
         title: "Validation complete",
         description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
       });
+      
+      // Update dataset with validation status
+      const selectedDataset = datasets.find(d => d.id === selectedDataset);
+      if (selectedDataset) {
+        selectedDataset.status = failCount > 0 ? "Failed" : (warningCount > 0 ? "Warning" : "Validated");
+      }
       
       fetchDatasets();
     } catch (error) {
@@ -283,7 +322,7 @@ datasets:
                     ) : (
                       datasets.map((ds) => (
                         <option key={ds.id} value={ds.id}>
-                          {ds.name} ({ds.type})
+                          {ds.name} ({ds.type}) {ds.status !== "Not Validated" ? ` - ${ds.status}` : ''}
                         </option>
                       ))
                     )}
@@ -468,7 +507,7 @@ datasets:
                 <div className="space-y-4">
                   {validationResults.map((result, index) => (
                     <motion.div
-                      key={result.id}
+                      key={result.id || `result-${index}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.1 }}

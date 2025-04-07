@@ -3,15 +3,17 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, Database, Download, Loader2, Info, RefreshCw } from "lucide-react";
+import { FileSpreadsheet, Database, Download, Loader2, Info, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { DatasetType, downloadDataset, getPublicDatasets } from "@/services/api";
+import { DatasetType, downloadDataset, getPublicDatasets, toggleDatasetPublicStatus } from "@/services/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const PublicDatasets = () => {
   const [publicDatasets, setPublicDatasets] = useState<DatasetType[]>([]);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -68,6 +70,27 @@ const PublicDatasets = () => {
       });
     } finally {
       setIsDownloading(null);
+    }
+  };
+
+  const handleRemoveFromPublic = async (datasetId: string) => {
+    setIsDeleting(datasetId);
+    try {
+      await toggleDatasetPublicStatus(datasetId, false);
+      await fetchPublicDatasets();
+      toast({
+        title: "Dataset Removed",
+        description: "Dataset has been removed from public datasets"
+      });
+    } catch (error) {
+      console.error("Error removing dataset from public:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove dataset from public datasets",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -143,19 +166,53 @@ const PublicDatasets = () => {
                   <TableCell>{dataset.rowCount}</TableCell>
                   <TableCell>{dataset.columnCount}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownload(dataset)}
-                      disabled={isDownloading === dataset.id}
-                    >
-                      {isDownloading === dataset.id ? (
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-3 w-3" />
-                      )}
-                      Download
-                    </Button>
+                    <div className="flex justify-end space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(dataset)}
+                        disabled={isDownloading === dataset.id}
+                      >
+                        {isDownloading === dataset.id ? (
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Download className="mr-2 h-3 w-3" />
+                        )}
+                        Download
+                      </Button>
+                      
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-500 hover:text-red-600 border-red-200 hover:border-red-300"
+                            disabled={isDeleting === dataset.id}
+                          >
+                            {isDeleting === dataset.id ? (
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-3 w-3" />
+                            )}
+                            Remove
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove from Public Datasets</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to remove "{dataset.name}" from public datasets? This won't delete the dataset, just make it private.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleRemoveFromPublic(dataset.id)}>
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
