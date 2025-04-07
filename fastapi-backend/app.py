@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes import router
 import logging
 from config import ServerConfig
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -18,10 +19,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Enable CORS
+# Enable CORS with proper configuration for GitHub Codespaces
+origins = [
+    "http://localhost:5173",            # Vite default
+    "http://localhost:8080",            # Alternative Vite port
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8080",
+]
+
+# Adding GitHub Codespaces URLs if running in that environment
+if "GITHUB_CODESPACES" in os.environ or "CODESPACE_NAME" in os.environ:
+    # Add wildcard for GitHub Codespaces domains
+    origins.append("https://*.app.github.dev")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, change to your frontend origin
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.app\.github\.dev",  # Regex for GitHub Codespaces
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

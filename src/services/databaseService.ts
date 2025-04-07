@@ -31,9 +31,23 @@ export const postgresConfig: PostgresConfig = {
 let importedDatasets: DatasetType[] = [];
 
 // Configuration for database service
-// The API_URL can be modified based on environment or .env variables
-// Default to localhost:8000 which is FastAPI's default
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";  
+// Automatically detect GitHub Codespaces and adjust API_URL accordingly
+const detectApiUrl = () => {
+  // GitHub Codespaces detection
+  if (window.location.hostname.includes('.app.github.dev')) {
+    // Replace frontend port (likely 5173 or 8080) with backend port (8000)
+    const baseUrl = window.location.origin;
+    const modifiedUrl = baseUrl.replace(/:\d+\.app\.github\.dev/, ':8000.app.github.dev');
+    console.log('Detected GitHub Codespaces, using URL:', modifiedUrl);
+    return modifiedUrl;
+  }
+  
+  // Default for local development
+  return import.meta.env.VITE_API_URL || "http://localhost:8000";
+};
+
+export const API_URL = detectApiUrl();
+console.log('Using API URL:', API_URL);
 
 // Initialize database connection from localStorage if available
 export const initDatabaseConnection = (): void => {

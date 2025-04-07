@@ -19,6 +19,7 @@ import {
   validateConnectionParams,
   API_URL
 } from "@/services/api";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 const formatTimeSince = (isoString: string | null): string => {
   if (!isoString) return "unknown";
@@ -55,15 +56,27 @@ const DatabaseConnection = () => {
   useEffect(() => {
     initDatabaseConnection();
     
-    fetch(`${API_URL}/health`)
-      .then(response => {
+    const checkBackendAvailable = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await fetch(`${API_URL}/health`, {
+          signal: controller.signal,
+          // No-cors mode won't help with the actual API calls, but helps determine if server is running
+          // mode: 'no-cors' 
+        });
+        
+        clearTimeout(timeoutId);
         setBackendAvailable(response.ok);
         console.log("Backend is available:", response.ok);
-      })
-      .catch(error => {
+      } catch (error) {
         console.error("Backend check failed:", error);
         setBackendAvailable(false);
-      });
+      }
+    };
+    
+    checkBackendAvailable();
     
     if (postgresConfig.isConnected) {
       setHost(postgresConfig.host);
@@ -181,21 +194,25 @@ const DatabaseConnection = () => {
   const renderBackendWarning = () => {
     if (backendAvailable === false) {
       return (
-        <div className="rounded-md bg-red-50 p-3 text-red-800 dark:bg-red-900/20 dark:text-red-400 mb-4">
-          <div className="flex">
-            <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Backend server not available</p>
-              <p className="text-sm mt-1">
-                The FastAPI backend server at {API_URL} is not responding. Please start the backend server.
-              </p>
-              <p className="text-sm mt-2 font-mono bg-red-100 dark:bg-red-900/40 p-2 rounded">
-                cd fastapi-backend && ./start_backend.sh <span className="text-xs">(Linux/Mac)</span><br />
-                cd fastapi-backend && start_backend.bat <span className="text-xs">(Windows)</span>
-              </p>
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-5 w-5 mr-2" />
+          <AlertTitle>Backend server not available</AlertTitle>
+          <AlertDescription>
+            <p>The FastAPI backend server at {API_URL} is not responding. Please start the backend server.</p>
+            <div className="mt-2 font-mono bg-red-100 dark:bg-red-900/40 p-2 rounded text-sm">
+              <p>cd fastapi-backend && ./start_backend.sh <span className="text-xs">(Linux/Mac)</span></p>
+              <p>cd fastapi-backend && start_backend.bat <span className="text-xs">(Windows)</span></p>
             </div>
-          </div>
-        </div>
+            <div className="mt-2">
+              <p className="text-sm">If using GitHub Codespaces, make sure:</p>
+              <ol className="list-decimal list-inside text-sm ml-2 mt-1">
+                <li>You've made the script executable: <code>chmod +x fastapi-backend/start_backend.sh</code></li>
+                <li>You're in the correct directory (project root) when running the command</li>
+                <li>Port 8000 is forwarded (should be automatic in most cases)</li>
+              </ol>
+            </div>
+          </AlertDescription>
+        </Alert>
       );
     }
     return null;
