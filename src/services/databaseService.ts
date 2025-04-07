@@ -82,7 +82,7 @@ export const initDatabaseConnection = (): void => {
 };
 
 // Test connection to PostgreSQL database
-export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<boolean> => {
+export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<any> => {
   // Update the config with any provided values
   Object.assign(postgresConfig, config);
   
@@ -134,13 +134,16 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
       throw new Error(`Invalid response from server: ${textResponse || 'Empty response'}`);
     }
     
-    postgresConfig.isConnected = result.success;
-    postgresConfig.lastConnected = new Date().toISOString();
+    // Update connection state if successful
+    if (result.success) {
+      postgresConfig.isConnected = true;
+      postgresConfig.lastConnected = new Date().toISOString();
+      
+      // Store the updated config in localStorage
+      localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
+    }
     
-    // Store the updated config in localStorage
-    localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
-    
-    return result.success;
+    return result;
   } catch (error) {
     console.error("Database connection error:", error);
     // Check if the error is related to backend unavailability

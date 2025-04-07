@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +52,7 @@ const DatabaseConnection = () => {
   const [lastConnected, setLastConnected] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+  const [connectionError, setConnectionError] = useState<{error: string, tips?: string[]} | null>(null);
 
   useEffect(() => {
     initDatabaseConnection();
@@ -109,9 +109,11 @@ const DatabaseConnection = () => {
     }
 
     setIsConnecting(true);
+    setConnectionError(null);
+    
     try {
       console.log("Attempting to connect to database:", host, port, database);
-      await connectToDatabase({
+      const result = await connectToDatabase({
         host,
         port,
         database,
@@ -119,15 +121,30 @@ const DatabaseConnection = () => {
         password
       });
       
-      setLastConnected(postgresConfig.lastConnected);
-      toast({
-        title: "Connected",
-        description: `Successfully connected to ${database} database`,
-      });
-      
-      handleGetTables();
+      if (result.success) {
+        setLastConnected(postgresConfig.lastConnected);
+        toast({
+          title: "Connected",
+          description: `Successfully connected to ${database} database`,
+        });
+        
+        handleGetTables();
+      } else if (result.error) {
+        setConnectionError({
+          error: result.error,
+          tips: result.troubleshooting
+        });
+        toast({
+          title: "Connection Failed",
+          description: "Failed to connect to database. See details below.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error("Connection error:", error);
+      setConnectionError({
+        error: error instanceof Error ? error.message : "Unknown error occurred"
+      });
       toast({
         title: "Connection Failed",
         description: error instanceof Error ? error.message : "Failed to connect to database",
@@ -220,6 +237,42 @@ const DatabaseConnection = () => {
     return null;
   };
 
+  const renderConnectionError = () => {
+    if (connectionError) {
+      return (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-5 w-5 mr-2" />
+          <AlertTitle>PostgreSQL Connection Error</AlertTitle>
+          <AlertDescription>
+            <p className="font-medium">{connectionError.error}</p>
+            
+            {connectionError.tips && connectionError.tips.length > 0 && (
+              <div className="mt-2">
+                <p className="text-sm font-semibold">Troubleshooting tips:</p>
+                <ul className="list-disc list-inside text-sm ml-2 mt-1">
+                  {connectionError.tips.map((tip, index) => (
+                    <li key={index}>{tip}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded">
+              <p className="text-sm font-medium">Common solutions:</p>
+              <ul className="list-disc list-inside text-xs ml-2 mt-1">
+                <li>Make sure PostgreSQL is installed and running</li>
+                <li>Check if the database exists</li>
+                <li>Verify username and password</li>
+                <li>Try connecting with a PostgreSQL client like pgAdmin or psql</li>
+              </ul>
+            </div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    return null;
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -233,6 +286,7 @@ const DatabaseConnection = () => {
       </CardHeader>
       <CardContent>
         {renderBackendWarning()}
+        {renderConnectionError()}
         
         {!postgresConfig.isConnected ? (
           <div className="space-y-4">
