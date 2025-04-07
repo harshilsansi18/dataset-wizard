@@ -1,5 +1,4 @@
-
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from models import DatabaseConnection, TableImport, PublicDatasetEntry
 from database import get_db_connection, test_connection
 from services import get_tables, import_table_data, get_public_datasets, add_public_dataset, remove_public_dataset
@@ -11,6 +10,18 @@ logger = logging.getLogger("routes")
 
 # Create router
 router = APIRouter()
+
+@router.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "name": "Dataset Manager API",
+        "version": "1.0.0",
+        "endpoints": [
+            "/health", "/connect", "/tables", "/import", 
+            "/public-datasets", "/public-datasets/{dataset_id}"
+        ]
+    }
 
 @router.post("/connect")
 async def connect_database(connection: DatabaseConnection):
@@ -24,10 +35,12 @@ async def connect_database(connection: DatabaseConnection):
             "password": connection.password,
         }
         
+        logger.info(f"Testing connection to database: {connection.host}:{connection.port}/{connection.database}")
         success = test_connection(connection_params)
         return {"success": success}
     except Exception as e:
         logger.error(f"Connection failed: {str(e)}")
+        # Return a clean error response
         raise HTTPException(status_code=500, detail=f"Connection error: {str(e)}")
 
 @router.get("/tables")

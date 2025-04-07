@@ -104,12 +104,36 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
       }),
     });
     
+    // Check HTTP status first
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to connect to database');
+      let errorDetail = 'Failed to connect to database';
+      
+      // Try to extract error details from JSON, but handle case where it's not valid JSON
+      try {
+        const errorBody = await response.json();
+        errorDetail = errorBody.detail || errorDetail;
+      } catch (jsonError) {
+        console.error("Failed to parse error response:", jsonError);
+        // If response has text but not valid JSON, use that
+        const textResponse = await response.text();
+        if (textResponse) {
+          errorDetail = textResponse;
+        }
+      }
+      
+      throw new Error(errorDetail);
     }
     
-    const result = await response.json();
+    // Parse the JSON response safely
+    let result;
+    try {
+      result = await response.json();
+    } catch (jsonError) {
+      console.error("Failed to parse JSON response:", jsonError);
+      const textResponse = await response.text();
+      throw new Error(`Invalid response from server: ${textResponse || 'Empty response'}`);
+    }
+    
     postgresConfig.isConnected = result.success;
     postgresConfig.lastConnected = new Date().toISOString();
     

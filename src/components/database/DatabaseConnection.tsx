@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ const DatabaseConnection = () => {
 
     setIsConnecting(true);
     try {
+      console.log("Attempting to connect to database:", host, port, database);
       await connectToDatabase({
         host,
         port,

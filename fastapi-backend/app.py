@@ -1,10 +1,12 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from routes import router
 import logging
 from config import ServerConfig
 import os
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -31,10 +33,12 @@ origins = [
 if "GITHUB_CODESPACES" in os.environ or "CODESPACE_NAME" in os.environ:
     # Add wildcard for GitHub Codespaces domains
     origins.append("https://*.app.github.dev")
+    logger.info("Running in GitHub Codespaces, adding app.github.dev to CORS origins")
 
+# Add CORS middleware with proper config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins for testing
     allow_origin_regex=r"https://.*\.app\.github\.dev",  # Regex for GitHub Codespaces
     allow_credentials=True,
     allow_methods=["*"],
@@ -44,10 +48,20 @@ app.add_middleware(
 # Include router
 app.include_router(router)
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception: {str(exc)}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy"}
+    return {"status": "healthy", "message": "API is running correctly"}
 
 if __name__ == "__main__":
     import uvicorn
