@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ import {
   ArrowLeft,
   Search,
   Eye,
-  Table
+  Table,
+  Hash
 } from "lucide-react";
 import { 
   getAllValidationResults, 
@@ -42,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -275,6 +278,13 @@ const Reports = () => {
   const closeDetails = () => {
     setIsDetailOpen(false);
     setSelectedResult(null);
+  };
+
+  // Format row numbers for display
+  const formatRowNumbers = (rows: number[]) => {
+    if (rows.length === 0) return "None";
+    if (rows.length <= 5) return rows.join(", ");
+    return `${rows.slice(0, 5).join(", ")} and ${rows.length - 5} more`;
   };
 
   return (
@@ -531,11 +541,11 @@ const Reports = () => {
                                     )}
                                     {errorDetails.rows.length > 0 && (
                                       <div className="flex items-center">
-                                        <span className="mr-1 font-medium">Affected rows:</span>
+                                        <span className="mr-1 font-medium flex items-center">
+                                          <Hash className="h-3 w-3 mr-1" /> Row numbers:
+                                        </span>
                                         <span className="text-slate-700 dark:text-slate-300">
-                                          {errorDetails.rows.length > 5 
-                                            ? `${errorDetails.rows.slice(0, 5).join(', ')} and ${errorDetails.rows.length - 5} more...` 
-                                            : errorDetails.rows.join(', ')}
+                                          {formatRowNumbers(errorDetails.rows)}
                                         </span>
                                       </div>
                                     )}
@@ -619,16 +629,19 @@ const Reports = () => {
                       
                       {errorDetails.rows.length > 0 && (
                         <div>
-                          <h4 className="text-sm font-medium text-slate-500">Affected Rows</h4>
+                          <h4 className="text-sm font-medium flex items-center text-slate-500">
+                            <Hash className="h-4 w-4 mr-1" /> Affected Row Numbers
+                          </h4>
                           <div className="mt-1 max-h-24 overflow-y-auto rounded-md border p-2">
                             <div className="flex flex-wrap gap-1">
                               {errorDetails.rows.map((row, i) => (
-                                <span 
+                                <Badge 
                                   key={i} 
-                                  className="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-700/10 dark:bg-slate-800 dark:text-slate-300"
+                                  variant="outline"
+                                  className="bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                                 >
                                   {row}
-                                </span>
+                                </Badge>
                               ))}
                             </div>
                           </div>
@@ -695,7 +708,9 @@ const Reports = () => {
                       <UITable>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-16">Row</TableHead>
+                            <TableHead className="w-16 bg-slate-100 dark:bg-slate-800">
+                              <Hash className="h-4 w-4" /><span className="ml-1">Row</span>
+                            </TableHead>
                             {extractErrorDetails(selectedResult).columns.slice(0, 3).map((col, i) => (
                               <TableHead key={i} className="font-medium text-red-600 dark:text-red-400">
                                 {col}
@@ -711,7 +726,9 @@ const Reports = () => {
                             
                             return rowData ? (
                               <TableRow key={i}>
-                                <TableCell className="font-medium">{rowNum}</TableCell>
+                                <TableCell className="font-medium bg-slate-50 dark:bg-slate-900">
+                                  {rowNum}
+                                </TableCell>
                                 {extractErrorDetails(selectedResult).columns.slice(0, 3).map((col, j) => (
                                   <TableCell key={j} className="text-red-600 dark:text-red-400">
                                     {rowData[col] !== undefined ? String(rowData[col]) : 'N/A'}
