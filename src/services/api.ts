@@ -9,12 +9,15 @@ import {
   importTableAsDataset, 
   disconnectDatabase, 
   postgresConfig,
+  PostgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
   validateConnectionParams,
+  getActiveConnections,
+  validateDataset,
   API_URL
 } from './databaseService';
 
@@ -41,12 +44,15 @@ export {
   importTableAsDataset,
   disconnectDatabase,
   postgresConfig,
+  PostgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
   validateConnectionParams,
+  getActiveConnections,
+  validateDataset,
   API_URL
 };
 

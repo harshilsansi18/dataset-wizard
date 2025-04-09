@@ -30,7 +30,7 @@ import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImpor
 const Validation = () => {
   const navigate = useNavigate();
   const [isRunning, setIsRunning] = useState(false);
-  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [validationMethod, setValidationMethod] = useState("basic");
   const [customSQL, setCustomSQL] = useState("SELECT COUNT(*) FROM table WHERE column IS NULL");
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
@@ -44,7 +44,7 @@ const Validation = () => {
     
     const storedDatasetId = sessionStorage.getItem('selectedDatasetId');
     if (storedDatasetId) {
-      setSelectedDataset(storedDatasetId);
+      setSelectedDatasetId(storedDatasetId);
       sessionStorage.removeItem('selectedDatasetId');
     }
   }, []);
@@ -134,7 +134,7 @@ const Validation = () => {
   };
 
   const handleRunValidation = async () => {
-    if (!selectedDataset) {
+    if (!selectedDatasetId) {
       toast({
         title: "No dataset selected",
         description: "Please select a dataset to validate",
@@ -152,19 +152,19 @@ const Validation = () => {
       let results;
       
       // For database datasets, use the backend validation endpoint
-      const selectedDatasetObj = datasets.find(d => d.id === selectedDataset);
+      const selectedDatasetObj = datasets.find(d => d.id === selectedDatasetId);
       
       if (selectedDatasetObj?.type === "Database") {
         try {
           // Call backend validation API
-          const validationResponse = await validateDataset(selectedDataset);
+          const validationResponse = await validateDataset(selectedDatasetId);
           
           if (validationResponse && validationResponse.validation_results) {
             results = validationResponse.validation_results;
           } else {
             // Fallback if validation endpoint doesn't return expected format
             results = await runValidation(
-              selectedDataset, 
+              selectedDatasetId, 
               validationMethod, 
               validationMethod === 'custom' ? customSQL : undefined
             );
@@ -173,7 +173,7 @@ const Validation = () => {
           console.error("Database validation error:", error);
           // Fallback to client-side validation if server validation fails
           results = await runValidation(
-            selectedDataset, 
+            selectedDatasetId, 
             validationMethod, 
             validationMethod === 'custom' ? customSQL : undefined
           );
@@ -181,7 +181,7 @@ const Validation = () => {
       } else {
         // For file datasets, use the client-side validation
         results = await runValidation(
-          selectedDataset, 
+          selectedDatasetId, 
           validationMethod, 
           validationMethod === 'custom' ? customSQL : undefined
         );
@@ -202,9 +202,9 @@ const Validation = () => {
       });
       
       // Update dataset with validation status
-      const selectedDataset = datasets.find(d => d.id === selectedDataset);
-      if (selectedDataset) {
-        selectedDataset.status = failCount > 0 ? "Failed" : (warningCount > 0 ? "Warning" : "Validated");
+      const dataset = datasets.find(d => d.id === selectedDatasetId);
+      if (dataset) {
+        dataset.status = failCount > 0 ? "Failed" : (warningCount > 0 ? "Warning" : "Validated");
       }
       
       fetchDatasets();
@@ -252,7 +252,7 @@ const Validation = () => {
 # Example Soda Core validation YAML
 profile: postgres
 datasets:
-  ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
+  ${selectedDatasetId ? datasets.find(d => d.id === selectedDatasetId)?.name || 'your_dataset' : 'your_dataset'}:
     checks:
       - row_count > 0
       - missing_count(customer_id) = 0${validationMethod === 'advanced' ? `
@@ -276,14 +276,14 @@ datasets:
     : null;
 
   useEffect(() => {
-    if (selectedDataset && datasets.length > 0 && !isRunning && validationResults.length === 0) {
+    if (selectedDatasetId && datasets.length > 0 && !isRunning && validationResults.length === 0) {
       const fromChatbot = sessionStorage.getItem('fromChatbot');
       if (fromChatbot) {
         sessionStorage.removeItem('fromChatbot');
         handleRunValidation();
       }
     }
-  }, [selectedDataset, datasets]);
+  }, [selectedDatasetId, datasets]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -313,8 +313,8 @@ datasets:
                   <select
                     id="dataset-select"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={selectedDataset || ""}
-                    onChange={(e) => setSelectedDataset(e.target.value)}
+                    value={selectedDatasetId || ""}
+                    onChange={(e) => setSelectedDatasetId(e.target.value)}
                   >
                     <option value="">Select a dataset...</option>
                     {loading ? (
@@ -373,7 +373,7 @@ datasets:
                 <Button 
                   className="w-full"
                   onClick={handleRunValidation}
-                  disabled={isRunning || !selectedDataset}
+                  disabled={isRunning || !selectedDatasetId}
                 >
                   {isRunning ? (
                     <>
@@ -434,9 +434,9 @@ datasets:
                   Validation Results
                 </span>
                 <div className="flex items-center">
-                  {selectedDataset && datasets.find(d => d.id === selectedDataset) && (
+                  {selectedDatasetId && datasets.find(d => d.id === selectedDatasetId) && (
                     <span className="mr-4 text-base font-normal text-slate-500">
-                      {datasets.find(d => d.id === selectedDataset)?.name}
+                      {datasets.find(d => d.id === selectedDatasetId)?.name}
                     </span>
                   )}
                   {validationDate && (

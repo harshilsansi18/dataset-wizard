@@ -93,7 +93,7 @@ const saveConnections = (): void => {
 };
 
 // Test connection to PostgreSQL database
-export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<any> => {
+export const connectToDatabase = async (config: Partial<PostgresConfig> = {}) => {
   // Create a copy of the default config
   const connectionConfig = { ...postgresConfig, ...config };
   
