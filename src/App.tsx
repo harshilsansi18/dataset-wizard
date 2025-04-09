@@ -18,7 +18,7 @@ import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import { initDatabaseConnection } from "./services/api";
 
-// Create a new queryClient instance
+// Create a new queryClient with default settings
 const queryClient = new QueryClient();
 
 const AppContent = () => {
