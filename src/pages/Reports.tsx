@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -280,7 +279,6 @@ const Reports = () => {
     setSelectedResult(null);
   };
 
-  // Format row numbers for display
   const formatRowNumbers = (rows: number[]) => {
     if (rows.length === 0) return "None";
     if (rows.length <= 5) return rows.join(", ");
