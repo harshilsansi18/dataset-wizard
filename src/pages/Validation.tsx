@@ -42,7 +42,6 @@ import {
   getDatasets, 
   runValidation, 
   getAllValidationResults, 
-  validateDataset,
   DatasetType, 
   ValidationResult 
 } from "@/services/api";
@@ -57,7 +56,7 @@ const Validation: React.FC = () => {
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
   const [selectedDataset, setSelectedDataset] = useState<DatasetType | null>(null);
-  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
+  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult[]>>({});
   const [isValidating, setIsValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -104,7 +103,7 @@ const Validation: React.FC = () => {
           description: "Failed to fetch validation results",
           variant: "destructive"
         });
-        return [];
+        return {};
       }
     },
     enabled: datasets.length > 0
@@ -126,7 +125,7 @@ const Validation: React.FC = () => {
 
     setIsValidating(true);
     try {
-      await validateDataset(selectedDataset.id);
+      await runValidation(selectedDataset.id, 'advanced');
       await refetchValidationResults();
       toast({
         title: "Validation Completed",
@@ -145,25 +144,26 @@ const Validation: React.FC = () => {
   };
 
   // Get validation result for a dataset
-  const getValidationResult = (datasetId: string): ValidationResult | undefined => {
-    return validationResults.find(result => result.dataset_id === datasetId);
+  const getValidationResult = (datasetId: string): ValidationResult[] | undefined => {
+    return validationResults[datasetId];
   };
 
   // Get validation status for UI display
   const getValidationStatus = (datasetId: string): ValidationStatus => {
-    const result = getValidationResult(datasetId);
-    if (!result) return "Not Validated";
-    if (result.issues.length === 0) return "Validated";
-    return "Issues Found";
+    const results = getValidationResult(datasetId);
+    if (!results || results.length === 0) return "Not Validated";
+    if (results.some(r => r.status === "Fail")) return "Issues Found";
+    if (results.some(r => r.status === "Warning")) return "Issues Found";
+    return "Validated";
   };
 
   // Get status badge
   const getStatusBadge = (status: ValidationStatus) => {
     switch (status) {
       case "Validated":
-        return <Badge variant="success" className="flex items-center"><CheckCircle2 className="mr-1 h-3 w-3" />Validated</Badge>;
+        return <Badge className="flex items-center bg-green-500 text-white"><CheckCircle2 className="mr-1 h-3 w-3" />Validated</Badge>;
       case "Issues Found":
-        return <Badge variant="warning" className="flex items-center"><AlertTriangle className="mr-1 h-3 w-3" />Issues Found</Badge>;
+        return <Badge className="flex items-center bg-yellow-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" />Issues Found</Badge>;
       case "Not Validated":
         return <Badge variant="outline" className="flex items-center"><XCircle className="mr-1 h-3 w-3" />Not Validated</Badge>;
       default:
@@ -183,7 +183,7 @@ const Validation: React.FC = () => {
       );
     }
 
-    const result = getValidationResult(selectedDataset.id);
+    const results = getValidationResult(selectedDataset.id);
     const status = getValidationStatus(selectedDataset.id);
 
     return (
@@ -220,33 +220,35 @@ const Validation: React.FC = () => {
 
         <Separator />
 
-        {result ? (
+        {results && results.length > 0 ? (
           <>
             <div className="grid grid-cols-3 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="text-sm font-medium text-gray-500">Data Quality Score</div>
                   <div className="mt-1 flex items-center">
-                    <div className="text-2xl font-bold">{result.quality_score.toFixed(1)}</div>
+                    <div className="text-2xl font-bold">{calculateQualityScore(results).toFixed(1)}</div>
                     <div className="text-sm text-gray-500 ml-1">/10</div>
                   </div>
-                  <Progress value={result.quality_score * 10} className="mt-2" />
+                  <Progress value={calculateQualityScore(results) * 10} className="mt-2" />
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <div className="text-sm font-medium text-gray-500">Issues Found</div>
-                  <div className="mt-1 text-2xl font-bold">{result.issues.length}</div>
+                  <div className="mt-1 text-2xl font-bold">
+                    {countIssues(results)}
+                  </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <div className="text-sm font-medium text-gray-500">Last Validated</div>
                   <div className="mt-1 text-2xl font-bold">
-                    {new Date(result.validation_date).toLocaleDateString()}
+                    {new Date(results[0].timestamp).toLocaleDateString()}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {new Date(result.validation_date).toLocaleTimeString()}
+                    {new Date(results[0].timestamp).toLocaleTimeString()}
                   </div>
                 </CardContent>
               </Card>
@@ -255,13 +257,13 @@ const Validation: React.FC = () => {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="issues">Issues ({result.issues.length})</TabsTrigger>
+                <TabsTrigger value="issues">Issues ({countIssues(results)})</TabsTrigger>
               </TabsList>
               <TabsContent value="overview" className="mt-4">
                 <Card>
                   <CardContent className="p-4">
                     <h4 className="font-medium mb-2">Validation Summary</h4>
-                    {result.issues.length === 0 ? (
+                    {countIssues(results) === 0 ? (
                       <Alert>
                         <CheckCircle2 className="h-4 w-4" />
                         <AlertTitle>No Issues Found</AlertTitle>
@@ -272,11 +274,11 @@ const Validation: React.FC = () => {
                     ) : (
                       <div className="space-y-2">
                         <p className="text-sm">
-                          {result.issues.length} issues were found during validation:
+                          {countIssues(results)} issues were found during validation:
                         </p>
                         <ul className="list-disc list-inside text-sm">
-                          {Array.from(new Set(result.issues.map(issue => issue.issue_type))).map(issueType => (
-                            <li key={issueType}>{issueType}</li>
+                          {results.filter(r => r.status !== "Pass").map((issue, idx) => (
+                            <li key={idx}>{issue.check}</li>
                           ))}
                         </ul>
                       </div>
@@ -285,7 +287,7 @@ const Validation: React.FC = () => {
                 </Card>
               </TabsContent>
               <TabsContent value="issues" className="mt-4">
-                {result.issues.length === 0 ? (
+                {countIssues(results) === 0 ? (
                   <div className="rounded-md border border-dashed border-gray-300 p-8 text-center">
                     <CheckCircle2 className="mx-auto h-8 w-8 text-green-500" />
                     <h3 className="mt-2 text-sm font-medium">No Issues Found</h3>
@@ -300,29 +302,25 @@ const Validation: React.FC = () => {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Issue Type</TableHead>
-                              <TableHead>Description</TableHead>
-                              <TableHead>Column</TableHead>
-                              <TableHead>Row</TableHead>
-                              <TableHead>Severity</TableHead>
+                              <TableHead>Check</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Details</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {result.issues.map((issue, index) => (
+                            {results.map((validation, index) => (
                               <TableRow key={index}>
-                                <TableCell className="font-medium">{issue.issue_type}</TableCell>
-                                <TableCell>{issue.description}</TableCell>
-                                <TableCell>{issue.column || 'N/A'}</TableCell>
-                                <TableCell>{issue.row_number !== undefined ? issue.row_number : 'N/A'}</TableCell>
+                                <TableCell className="font-medium">{validation.check}</TableCell>
                                 <TableCell>
-                                  {issue.severity === 'high' ? (
-                                    <Badge variant="destructive">High</Badge>
-                                  ) : issue.severity === 'medium' ? (
-                                    <Badge variant="warning">Medium</Badge>
+                                  {validation.status === 'Pass' ? (
+                                    <Badge className="bg-green-500 text-white">Pass</Badge>
+                                  ) : validation.status === 'Warning' ? (
+                                    <Badge className="bg-yellow-500 text-white">Warning</Badge>
                                   ) : (
-                                    <Badge variant="default">Low</Badge>
+                                    <Badge variant="destructive">Fail</Badge>
                                   )}
                                 </TableCell>
+                                <TableCell>{validation.details}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -345,6 +343,25 @@ const Validation: React.FC = () => {
         )}
       </div>
     );
+  };
+
+  // Helper functions for calculating validation metrics
+  const calculateQualityScore = (results: ValidationResult[]): number => {
+    if (!results || results.length === 0) return 0;
+    
+    // Calculate score based on pass/warning/fail ratio
+    const total = results.length;
+    const passes = results.filter(r => r.status === "Pass").length;
+    const warnings = results.filter(r => r.status === "Warning").length;
+    
+    // Each pass is worth 1 point, each warning 0.5 points
+    const score = (passes + warnings * 0.5) / total * 10;
+    return Math.max(0, Math.min(10, score)); // Constrain between 0-10
+  };
+
+  const countIssues = (results: ValidationResult[]): number => {
+    if (!results) return 0;
+    return results.filter(r => r.status !== "Pass").length;
   };
 
   return (
@@ -402,35 +419,39 @@ const Validation: React.FC = () => {
                   <div className="mt-2 space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-sm">
-                        <Badge variant="success" className="mr-2">
+                        <span className="flex items-center justify-center w-4 h-4 bg-green-500 text-white rounded-full mr-2">
                           <CheckCircle2 className="h-3 w-3" />
-                        </Badge>
+                        </span>
                         <span>Validated</span>
                       </div>
                       <span className="text-sm text-gray-500">
-                        {validationResults.filter(r => r.issues.length === 0).length}
+                        {Object.values(validationResults).filter(results => 
+                          results.every(r => r.status === "Pass")
+                        ).length}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-sm">
-                        <Badge variant="warning" className="mr-2">
+                        <span className="flex items-center justify-center w-4 h-4 bg-yellow-500 text-white rounded-full mr-2">
                           <AlertTriangle className="h-3 w-3" />
-                        </Badge>
+                        </span>
                         <span>Issues Found</span>
                       </div>
                       <span className="text-sm text-gray-500">
-                        {validationResults.filter(r => r.issues.length > 0).length}
+                        {Object.values(validationResults).filter(results => 
+                          results.some(r => r.status !== "Pass")
+                        ).length}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-sm">
-                        <Badge variant="outline" className="mr-2">
-                          <XCircle className="h-3 w-3" />
-                        </Badge>
+                        <span className="flex items-center justify-center w-4 h-4 border border-gray-300 rounded-full mr-2">
+                          <XCircle className="h-3 w-3 text-gray-500" />
+                        </span>
                         <span>Not Validated</span>
                       </div>
                       <span className="text-sm text-gray-500">
-                        {datasets.length - validationResults.length}
+                        {datasets.length - Object.keys(validationResults).length}
                       </span>
                     </div>
                   </div>
