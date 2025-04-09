@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Search,
-  Eye
+  Eye,
+  Table
 } from "lucide-react";
 import { 
   getAllValidationResults, 
@@ -34,6 +34,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table as UITable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -46,8 +54,7 @@ const Reports = () => {
   const [selectedResult, setSelectedResult] = useState<ValidationResult | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [datasetFilter, setDatasetFilter] = useState("");
-  
-  // Load datasets and validation results on initial page load
+
   useEffect(() => {
     console.log("Reports page: Initial data load");
     fetchData();
@@ -62,11 +69,9 @@ const Reports = () => {
         getAllValidationResults()
       ]);
       
-      // Ensure imported database datasets are included
       const importedDatasets = getImportedDatasets();
       const allDatasets = [...datasetsData];
       
-      // Add any database datasets that might be missing
       importedDatasets.forEach(dbDataset => {
         if (!allDatasets.some(ds => ds.id === dbDataset.id)) {
           allDatasets.push(dbDataset);
@@ -77,7 +82,6 @@ const Reports = () => {
       setDatasets(allDatasets);
       setValidationResults(resultsData);
       
-      // Auto-select the first dataset with validation results
       if (Object.keys(resultsData).length > 0 && !selectedDataset) {
         setSelectedDataset(Object.keys(resultsData)[0]);
         console.log("Auto-selected dataset:", Object.keys(resultsData)[0]);
@@ -196,6 +200,71 @@ const Reports = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const extractErrorDetails = (result: ValidationResult) => {
+    let errorDetails = {
+      columns: [] as string[],
+      rows: [] as number[],
+      description: result.details,
+      hasStructuredInfo: false
+    };
+
+    if (!result || result.status === 'Pass') {
+      return errorDetails;
+    }
+
+    try {
+      const columnMatch = result.details.match(/columns?: ([^\.]+)/i);
+      if (columnMatch && columnMatch[1]) {
+        errorDetails.columns = columnMatch[1].split(/,\s*/).map(col => col.trim());
+        errorDetails.hasStructuredInfo = true;
+      }
+
+      const rowMatches = result.details.match(/rows?: (\d+)|row (\d+)|rows? (\d+(-\d+)?(,\s*\d+(-\d+)?)*)/gi);
+      if (rowMatches) {
+        const rowNumbers: number[] = [];
+        rowMatches.forEach(match => {
+          const numbers = match.match(/\d+/g);
+          if (numbers) {
+            numbers.forEach(num => rowNumbers.push(parseInt(num, 10)));
+          }
+        });
+        errorDetails.rows = [...new Set(rowNumbers)];
+        errorDetails.hasStructuredInfo = true;
+      }
+
+      if (result.check.includes("missing value")) {
+        const nullCounts = result.details.match(/(\d+) missing values/);
+        if (nullCounts && nullCounts[1]) {
+          errorDetails.description = `Found ${nullCounts[1]} missing values${errorDetails.columns.length > 0 ? ` in columns: ${errorDetails.columns.join(', ')}` : ''}`;
+          errorDetails.hasStructuredInfo = true;
+        }
+      } else if (result.check.includes("Data type")) {
+        if (errorDetails.columns.length > 0) {
+          errorDetails.description = `Inconsistent data types detected in columns: ${errorDetails.columns.join(', ')}`;
+          errorDetails.hasStructuredInfo = true;
+        }
+      } else if (result.check.includes("AI-powered")) {
+        const outlierMatch = result.details.match(/(\w+): (\d+) outliers/);
+        if (outlierMatch) {
+          errorDetails.columns = [outlierMatch[1]];
+          errorDetails.description = `${outlierMatch[2]} outliers detected in column ${outlierMatch[1]}`;
+          errorDetails.hasStructuredInfo = true;
+        }
+        
+        const emailMatch = result.details.match(/(\w+): May contain emails/);
+        if (emailMatch) {
+          errorDetails.columns = [emailMatch[1]];
+          errorDetails.description = `Inconsistent email format in column ${emailMatch[1]}`;
+          errorDetails.hasStructuredInfo = true;
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing validation details:", error);
+    }
+
+    return errorDetails;
   };
 
   const viewResultDetails = (result: ValidationResult) => {
@@ -428,42 +497,70 @@ const Reports = () => {
               ) : (
                 <ScrollArea className="h-[500px] pr-4">
                   <div className="space-y-4">
-                    {filteredResults.map((result, index) => (
-                      <motion.div
-                        key={result.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className={`rounded-lg border p-4 ${getResultClass(result.status)}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start">
-                            <div className="mr-3 mt-0.5">
-                              {getResultIcon(result.status)}
+                    {filteredResults.map((result, index) => {
+                      const errorDetails = extractErrorDetails(result);
+                      
+                      return (
+                        <motion.div
+                          key={result.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: index * 0.05 }}
+                          className={`rounded-lg border p-4 ${getResultClass(result.status)}`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start">
+                              <div className="mr-3 mt-0.5">
+                                {getResultIcon(result.status)}
+                              </div>
+                              <div>
+                                <h3 className="font-medium">{result.check}</h3>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                  {result.details}
+                                </p>
+                                
+                                {(errorDetails.columns.length > 0 || errorDetails.rows.length > 0) && (
+                                  <div className="mt-2 rounded-md bg-background p-2 text-xs">
+                                    {errorDetails.columns.length > 0 && (
+                                      <div className="mb-1 flex items-center">
+                                        <span className="mr-1 font-medium">Affected columns:</span>
+                                        <span className="text-slate-700 dark:text-slate-300">
+                                          {errorDetails.columns.join(', ')}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {errorDetails.rows.length > 0 && (
+                                      <div className="flex items-center">
+                                        <span className="mr-1 font-medium">Affected rows:</span>
+                                        <span className="text-slate-700 dark:text-slate-300">
+                                          {errorDetails.rows.length > 5 
+                                            ? `${errorDetails.rows.slice(0, 5).join(', ')} and ${errorDetails.rows.length - 5} more...` 
+                                            : errorDetails.rows.join(', ')}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {new Date(result.timestamp).toLocaleString()}
+                                </p>
+                              </div>
                             </div>
                             <div>
-                              <h3 className="font-medium">{result.check}</h3>
-                              <p className="text-sm text-slate-600 dark:text-slate-300">
-                                {result.details}
-                              </p>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {new Date(result.timestamp).toLocaleString()}
-                              </p>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => viewResultDetails(result)}
+                              >
+                                <Eye className="mr-1 h-4 w-4" />
+                                View Details
+                              </Button>
                             </div>
                           </div>
-                          <div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => viewResultDetails(result)}
-                            >
-                              <Eye className="mr-1 h-4 w-4" />
-                              View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 </ScrollArea>
               )}
@@ -484,66 +581,162 @@ const Reports = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className={`mt-4 rounded-lg border p-4 ${selectedResult ? getResultClass(selectedResult.status) : ''}`}>
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium text-slate-500">Status</h4>
-                <p className="font-medium">
-                  {selectedResult?.status}
-                </p>
-              </div>
-              
-              <div>
-                <h4 className="text-sm font-medium text-slate-500">Details</h4>
-                <p>{selectedResult?.details}</p>
-              </div>
-              
-              {selectedResult?.check.includes("Row count") && (
+          {selectedResult && (
+            <div className={`mt-4 rounded-lg border p-4 ${getResultClass(selectedResult.status)}`}>
+              <div className="space-y-4">
                 <div>
-                  <h4 className="text-sm font-medium text-slate-500">Row Information</h4>
-                  <p>
-                    {selectedResult.details.includes("rows") 
-                      ? `The dataset contains ${selectedResult.details.match(/\d+/)?.[0] || "unknown"} rows.`
-                      : "Row count information is not available."}
+                  <h4 className="text-sm font-medium text-slate-500">Status</h4>
+                  <p className="font-medium">
+                    {selectedResult.status}
                   </p>
                 </div>
-              )}
-              
-              {selectedResult?.check.includes("missing value") && (
+                
                 <div>
-                  <h4 className="text-sm font-medium text-slate-500">Null Values</h4>
-                  <p>
-                    {selectedResult.details.includes("missing") 
-                      ? `Found ${selectedResult.details.match(/\d+/)?.[0] || "0"} missing values.`
-                      : "No null values were found."}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-500">
-                    Missing values can indicate data quality issues that may need to be addressed.
-                  </p>
+                  <h4 className="text-sm font-medium text-slate-500">Details</h4>
+                  <p>{selectedResult.details}</p>
                 </div>
-              )}
-              
-              {selectedResult?.check.includes("Data type") && (
-                <div>
-                  <h4 className="text-sm font-medium text-slate-500">Data Types</h4>
-                  <p>
-                    {selectedResult.details.includes("inconsistent") 
-                      ? "This dataset contains mixed data types which may cause issues in data processing."
-                      : "All values have consistent data types."}
-                  </p>
+                
+                {(() => {
+                  const errorDetails = extractErrorDetails(selectedResult);
+                  
+                  return (
+                    <>
+                      {errorDetails.columns.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">Affected Columns</h4>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {errorDetails.columns.map((column, i) => (
+                              <span 
+                                key={i} 
+                                className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 dark:bg-blue-900/20 dark:text-blue-300"
+                              >
+                                {column}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {errorDetails.rows.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">Affected Rows</h4>
+                          <div className="mt-1 max-h-24 overflow-y-auto rounded-md border p-2">
+                            <div className="flex flex-wrap gap-1">
+                              {errorDetails.rows.map((row, i) => (
+                                <span 
+                                  key={i} 
+                                  className="inline-flex items-center rounded-md bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 ring-1 ring-inset ring-slate-700/10 dark:bg-slate-800 dark:text-slate-300"
+                                >
+                                  {row}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedResult.check.includes("Data type") && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">Suggested Fix</h4>
+                          <p className="text-sm">
+                            Ensure all values in the affected columns have consistent data types. 
+                            Consider transforming or cleaning the data before importing.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {selectedResult.check.includes("missing value") && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">Suggested Fix</h4>
+                          <p className="text-sm">
+                            Add missing values in the affected columns or set appropriate default values.
+                            Consider using data imputation techniques for missing values.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {selectedResult.check.includes("AI-powered") && selectedResult.status !== "Pass" && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">AI Analysis</h4>
+                          <p className="text-sm">
+                            The AI detected potential anomalies in your data that may affect analysis quality.
+                            Review the highlighted columns and rows for unexpected patterns or outliers.
+                          </p>
+                        </div>
+                      )}
+                      
+                      {selectedResult.check.includes("Duplicate") && (
+                        <div>
+                          <h4 className="text-sm font-medium text-slate-500">Suggested Fix</h4>
+                          <p className="text-sm">
+                            Remove duplicate rows or ensure they represent valid repeated measurements.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                
+                {selectedResult?.check.includes("Row count") && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-500">Row Information</h4>
+                    <p>
+                      {selectedResult.details.includes("rows") 
+                        ? `The dataset contains ${selectedResult.details.match(/\d+/)?.[0] || "unknown"} rows.`
+                        : "Row count information is not available."}
+                    </p>
+                  </div>
+                )}
+                
+                {selectedDatasetInfo?.content && selectedResult && selectedResult.status !== "Pass" && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-500">Sample Data</h4>
+                    <div className="mt-2 max-h-64 overflow-auto rounded border">
+                      <UITable>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Row</TableHead>
+                            {extractErrorDetails(selectedResult).columns.slice(0, 3).map((col, i) => (
+                              <TableHead key={i} className="font-medium text-red-600 dark:text-red-400">
+                                {col}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {extractErrorDetails(selectedResult).rows.slice(0, 5).map((rowNum, i) => {
+                            const rowData = selectedDatasetInfo.content && rowNum <= selectedDatasetInfo.content.length 
+                              ? selectedDatasetInfo.content[rowNum - 1] 
+                              : null;
+                            
+                            return rowData ? (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">{rowNum}</TableCell>
+                                {extractErrorDetails(selectedResult).columns.slice(0, 3).map((col, j) => (
+                                  <TableCell key={j} className="text-red-600 dark:text-red-400">
+                                    {rowData[col] !== undefined ? String(rowData[col]) : 'N/A'}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ) : null;
+                          })}
+                        </TableBody>
+                      </UITable>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="pt-2">
+                  <Button 
+                    onClick={closeDetails} 
+                    className="w-full"
+                  >
+                    Close
+                  </Button>
                 </div>
-              )}
-              
-              <div className="pt-2">
-                <Button 
-                  onClick={closeDetails} 
-                  className="w-full"
-                >
-                  Close
-                </Button>
               </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
