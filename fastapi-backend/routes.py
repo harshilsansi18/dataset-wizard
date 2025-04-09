@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query, Depends, Response
+
+from fastapi import APIRouter, HTTPException, Query, Depends
 from models import DatabaseConnection, TableImport, PublicDatasetEntry
 from database import get_db_connection, test_connection
 from services import get_tables, import_table_data, get_public_datasets, add_public_dataset, remove_public_dataset
 import logging
-import psycopg2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -11,18 +11,6 @@ logger = logging.getLogger("routes")
 
 # Create router
 router = APIRouter()
-
-@router.get("/")
-async def root():
-    """Root endpoint with API information"""
-    return {
-        "name": "Dataset Manager API",
-        "version": "1.0.0",
-        "endpoints": [
-            "/health", "/connect", "/tables", "/import", 
-            "/public-datasets", "/public-datasets/{dataset_id}"
-        ]
-    }
 
 @router.post("/connect")
 async def connect_database(connection: DatabaseConnection):
@@ -36,36 +24,11 @@ async def connect_database(connection: DatabaseConnection):
             "password": connection.password,
         }
         
-        logger.info(f"Testing connection to database: {connection.host}:{connection.port}/{connection.database}")
         success = test_connection(connection_params)
-        return {"success": success, "message": "Connection successful"}
-    except psycopg2.OperationalError as e:
-        logger.error(f"PostgreSQL connection failed: {str(e)}")
-        error_message = str(e)
-        troubleshooting = get_connection_troubleshooting_tips(connection.host, connection.port)
-        # Return a clean error response with troubleshooting tips
-        return {"success": False, "error": error_message, "troubleshooting": troubleshooting}
+        return {"success": success}
     except Exception as e:
-        logger.error(f"Connection failed with unexpected error: {str(e)}")
-        # Return a clean error response
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
-
-def get_connection_troubleshooting_tips(host, port):
-    """Generate troubleshooting tips based on connection parameters"""
-    tips = [
-        "Make sure PostgreSQL is installed and running on the target machine",
-        f"Verify PostgreSQL is listening on {host}:{port}",
-        "Check if your firewall allows connections to PostgreSQL",
-        "Ensure the database user has permission to connect",
-        "If using a remote server, ensure PostgreSQL is configured to accept remote connections in pg_hba.conf"
-    ]
-    
-    if host == "localhost":
-        # Add localhost-specific tips
-        tips.append("On Windows, check if PostgreSQL service is running via Services app")
-        tips.append("On Linux/Mac, try 'sudo service postgresql status' or 'pg_isready'")
-    
-    return tips
+        logger.error(f"Connection failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Connection error: {str(e)}")
 
 @router.get("/tables")
 async def list_tables(

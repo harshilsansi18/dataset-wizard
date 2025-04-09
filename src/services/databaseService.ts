@@ -82,7 +82,7 @@ export const initDatabaseConnection = (): void => {
 };
 
 // Test connection to PostgreSQL database
-export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<any> => {
+export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): Promise<boolean> => {
   // Update the config with any provided values
   Object.assign(postgresConfig, config);
   
@@ -104,46 +104,19 @@ export const connectToDatabase = async (config: Partial<PostgresConfig> = {}): P
       }),
     });
     
-    // Check HTTP status first
     if (!response.ok) {
-      let errorDetail = 'Failed to connect to database';
-      
-      // Try to extract error details from JSON, but handle case where it's not valid JSON
-      try {
-        const errorBody = await response.json();
-        errorDetail = errorBody.detail || errorDetail;
-      } catch (jsonError) {
-        console.error("Failed to parse error response:", jsonError);
-        // If response has text but not valid JSON, use that
-        const textResponse = await response.text();
-        if (textResponse) {
-          errorDetail = textResponse;
-        }
-      }
-      
-      throw new Error(errorDetail);
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to connect to database');
     }
     
-    // Parse the JSON response safely
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonError) {
-      console.error("Failed to parse JSON response:", jsonError);
-      const textResponse = await response.text();
-      throw new Error(`Invalid response from server: ${textResponse || 'Empty response'}`);
-    }
+    const result = await response.json();
+    postgresConfig.isConnected = result.success;
+    postgresConfig.lastConnected = new Date().toISOString();
     
-    // Update connection state if successful
-    if (result.success) {
-      postgresConfig.isConnected = true;
-      postgresConfig.lastConnected = new Date().toISOString();
-      
-      // Store the updated config in localStorage
-      localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
-    }
+    // Store the updated config in localStorage
+    localStorage.setItem("postgres_config", JSON.stringify(postgresConfig));
     
-    return result;
+    return result.success;
   } catch (error) {
     console.error("Database connection error:", error);
     // Check if the error is related to backend unavailability
