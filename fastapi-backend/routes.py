@@ -1,11 +1,9 @@
-
 from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from models import DatabaseConnection, TableImport, PublicDatasetEntry
 from database import get_db_connection, test_connection
 from services import get_tables, import_table_data, get_public_datasets, add_public_dataset, remove_public_dataset
 import logging
 import psycopg2
-from typing import Dict, Any
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -13,9 +11,6 @@ logger = logging.getLogger("routes")
 
 # Create router
 router = APIRouter()
-
-# Store active connections
-active_connections = {}
 
 @router.get("/")
 async def root():
@@ -29,11 +24,6 @@ async def root():
         ]
     }
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok", "connections": len(active_connections)}
-
 @router.post("/connect")
 async def connect_database(connection: DatabaseConnection):
     """Test connection to a PostgreSQL database"""
@@ -46,17 +36,9 @@ async def connect_database(connection: DatabaseConnection):
             "password": connection.password,
         }
         
-        connection_key = f"{connection.host}:{connection.port}/{connection.database}"
-        logger.info(f"Testing connection to database: {connection_key}")
-        
+        logger.info(f"Testing connection to database: {connection.host}:{connection.port}/{connection.database}")
         success = test_connection(connection_params)
-        
-        if success:
-            # Store the connection details with a unique key
-            active_connections[connection_key] = connection_params
-            logger.info(f"Successfully connected to {connection_key}")
-        
-        return {"success": success, "message": "Connection successful", "connectionKey": connection_key}
+        return {"success": success, "message": "Connection successful"}
     except psycopg2.OperationalError as e:
         logger.error(f"PostgreSQL connection failed: {str(e)}")
         error_message = str(e)
@@ -67,27 +49,6 @@ async def connect_database(connection: DatabaseConnection):
         logger.error(f"Connection failed with unexpected error: {str(e)}")
         # Return a clean error response
         return {"success": False, "error": f"Unexpected error: {str(e)}"}
-
-@router.delete("/connect/{connection_key}")
-async def disconnect_database(connection_key: str):
-    """Disconnect from a database"""
-    if connection_key in active_connections:
-        del active_connections[connection_key]
-        logger.info(f"Disconnected from {connection_key}")
-        return {"success": True, "message": f"Disconnected from {connection_key}"}
-    else:
-        logger.warning(f"Connection {connection_key} not found")
-        return {"success": False, "error": "Connection not found"}
-
-@router.get("/connections")
-async def list_connections():
-    """List all active connections"""
-    return {
-        "connections": [
-            {"key": key, "host": params["host"], "database": params["database"]} 
-            for key, params in active_connections.items()
-        ]
-    }
 
 def get_connection_troubleshooting_tips(host, port):
     """Generate troubleshooting tips based on connection parameters"""
@@ -108,27 +69,21 @@ def get_connection_troubleshooting_tips(host, port):
 
 @router.get("/tables")
 async def list_tables(
-    connection_key: str = None,
-    host: str = None, 
-    port: int = None, 
-    database: str = None, 
-    user: str = None, 
+    host: str, 
+    port: int, 
+    database: str, 
+    user: str, 
     password: str = None
 ):
     """Get all tables in the database"""
     try:
-        # First try to use connection_key if provided
-        if connection_key and connection_key in active_connections:
-            connection_params = active_connections[connection_key]
-        else:
-            # Fallback to direct connection parameters
-            connection_params = {
-                "host": host,
-                "port": port,
-                "database": database,
-                "user": user,
-                "password": password,
-            }
+        connection_params = {
+            "host": host,
+            "port": port,
+            "database": database,
+            "user": user,
+            "password": password,
+        }
         
         tables = get_tables(connection_params)
         return {"tables": tables}
@@ -149,26 +104,6 @@ async def import_table(import_data: TableImport):
         }
         
         dataset = import_table_data(connection_params, import_data.table)
-        
-        # Add validation status to the dataset
-        dataset["status"] = "Validated"
-        dataset["validation_results"] = [
-            {
-                "id": "val_1",
-                "check": "Row Count Check",
-                "status": "Pass" if dataset["rowCount"] > 0 else "Fail",
-                "details": f"Dataset has {dataset['rowCount']} rows",
-                "timestamp": dataset["lastUpdated"]
-            },
-            {
-                "id": "val_2",
-                "check": "Schema Validation",
-                "status": "Pass",
-                "details": f"Schema with {dataset['columnCount']} columns is valid",
-                "timestamp": dataset["lastUpdated"]
-            }
-        ]
-        
         return dataset
     except Exception as e:
         logger.error(f"Error importing table: {str(e)}")
@@ -184,7 +119,7 @@ async def fetch_public_datasets():
         raise HTTPException(status_code=500, detail=f"Error fetching public datasets: {str(e)}")
 
 @router.post("/public-datasets/{dataset_id}")
-async def add_dataset_to_public(dataset_id: str, dataset: Dict[str, Any]):
+async def add_dataset_to_public(dataset_id: str, dataset: dict):
     """Add a dataset to public datasets"""
     try:
         add_public_dataset(dataset_id, dataset)
@@ -206,40 +141,3 @@ async def delete_public_dataset(dataset_id: str):
     except Exception as e:
         logger.error(f"Error removing public dataset: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error removing public dataset: {str(e)}")
-
-@router.get("/validate/{dataset_id}")
-async def validate_dataset(dataset_id: str):
-    """Validate a dataset"""
-    try:
-        # For now just return dummy validation results
-        # In a real implementation, this would validate the dataset properly
-        return {
-            "success": True,
-            "dataset_id": dataset_id,
-            "validation_results": [
-                {
-                    "id": "val_1",
-                    "check": "Row Count Check",
-                    "status": "Pass",
-                    "details": "Dataset has rows",
-                    "timestamp": "2023-04-07T10:00:00Z"
-                },
-                {
-                    "id": "val_2",
-                    "check": "Schema Validation",
-                    "status": "Pass",
-                    "details": "Schema is valid",
-                    "timestamp": "2023-04-07T10:00:00Z"
-                },
-                {
-                    "id": "val_3",
-                    "check": "Data Type Check",
-                    "status": "Pass",
-                    "details": "All columns have correct data types",
-                    "timestamp": "2023-04-07T10:00:00Z"
-                }
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Error validating dataset: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error validating dataset: {str(e)}")

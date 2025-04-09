@@ -1,483 +1,503 @@
-
-import React, { useState, useEffect } from "react";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { 
-  CheckCircle2, 
-  AlertTriangle, 
+  Shield, 
+  Play, 
+  Clock, 
+  CheckCircle, 
   XCircle, 
-  RefreshCw, 
-  FileText, 
-  BarChart, 
-  Loader2, 
-  Search, 
-  ArrowRight
+  AlertTriangle, 
+  Terminal,
+  Copy,
+  Database,
+  Loader2,
+  FileText,
+  Calendar
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
-import { 
-  getDatasets, 
-  runValidation, 
-  getAllValidationResults, 
-  DatasetType, 
-  ValidationResult 
-} from "@/services/api";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { motion } from "framer-motion";
+import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets } from "@/services/api";
 
-// Define the status type to match what's expected in the UI
-type ValidationStatus = "Validated" | "Issues Found" | "Not Validated";
-
-const Validation: React.FC = () => {
+const Validation = () => {
+  const navigate = useNavigate();
+  const [isRunning, setIsRunning] = useState(false);
+  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  const [validationMethod, setValidationMethod] = useState("basic");
+  const [customSQL, setCustomSQL] = useState("SELECT COUNT(*) FROM table WHERE column IS NULL");
+  const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
-  const [selectedDataset, setSelectedDataset] = useState<DatasetType | null>(null);
-  const [validationResults, setValidationResults] = useState<Record<string, ValidationResult[]>>({});
-  const [isValidating, setIsValidating] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [logs, setLogs] = useState<string[]>([]);
 
-  // Fetch datasets
-  const {
-    data: datasetsData,
-    isLoading: isLoadingDatasets,
-    refetch: refetchDatasets
-  } = useQuery({
-    queryKey: ["datasets"],
-    queryFn: async () => {
-      try {
-        const data = await getDatasets();
-        setDatasets(data);
-        return data;
-      } catch (error) {
-        console.error("Error fetching datasets:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch datasets",
-          variant: "destructive"
-        });
-        return [];
-      }
-    }
-  });
-
-  // Fetch validation results
-  const {
-    data: validationResultsData,
-    isLoading: isLoadingValidationResults,
-    refetch: refetchValidationResults
-  } = useQuery({
-    queryKey: ["validationResults"],
-    queryFn: async () => {
-      try {
-        const data = await getAllValidationResults();
-        setValidationResults(data);
-        return data;
-      } catch (error) {
-        console.error("Error fetching validation results:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch validation results",
-          variant: "destructive"
-        });
-        return {};
-      }
-    },
-    enabled: datasets.length > 0
-  });
-
-  // Handle dataset selection
   useEffect(() => {
-    if (selectedDatasetId && datasets.length > 0) {
-      const dataset = datasets.find(ds => ds.id === selectedDatasetId);
-      setSelectedDataset(dataset || null);
-    } else {
-      setSelectedDataset(null);
+    fetchDatasets();
+    
+    const storedDatasetId = sessionStorage.getItem('selectedDatasetId');
+    if (storedDatasetId) {
+      setSelectedDataset(storedDatasetId);
+      sessionStorage.removeItem('selectedDatasetId');
     }
-  }, [selectedDatasetId, datasets]);
+  }, []);
 
-  // Run validation
-  const handleRunValidation = async () => {
-    if (!selectedDataset) return;
-
-    setIsValidating(true);
+  const fetchDatasets = async () => {
+    setLoading(true);
     try {
-      await runValidation(selectedDataset.id, 'advanced');
-      await refetchValidationResults();
-      toast({
-        title: "Validation Completed",
-        description: `Dataset "${selectedDataset.name}" has been validated`,
-      });
+      const fileDatasets = await getDatasets();
+      const dbDatasets = await refreshImportedDatasets();
+      
+      console.log("File datasets:", fileDatasets.length);
+      console.log("Database datasets:", dbDatasets.length);
+      
+      const allDatasetIds = new Set();
+      const allDatasets = [];
+      
+      for (const dataset of fileDatasets) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
+      for (const dataset of dbDatasets) {
+        if (!allDatasetIds.has(dataset.id)) {
+          allDatasetIds.add(dataset.id);
+          allDatasets.push(dataset);
+        }
+      }
+      
+      setDatasets(allDatasets);
+      
+      console.log("Validation page loaded datasets:", allDatasets.length);
     } catch (error) {
-      console.error("Validation error:", error);
+      console.error("Error fetching datasets:", error);
       toast({
-        title: "Validation Failed",
-        description: error instanceof Error ? error.message : "An error occurred during validation",
+        title: "Error",
+        description: "Failed to fetch datasets. Please try again.",
         variant: "destructive"
       });
     } finally {
-      setIsValidating(false);
+      setLoading(false);
     }
   };
 
-  // Get validation result for a dataset
-  const getValidationResult = (datasetId: string): ValidationResult[] | undefined => {
-    return validationResults[datasetId];
-  };
-
-  // Get validation status for UI display
-  const getValidationStatus = (datasetId: string): ValidationStatus => {
-    const results = getValidationResult(datasetId);
-    if (!results || results.length === 0) return "Not Validated";
-    if (results.some(r => r.status === "Fail")) return "Issues Found";
-    if (results.some(r => r.status === "Warning")) return "Issues Found";
-    return "Validated";
-  };
-
-  // Get status badge
-  const getStatusBadge = (status: ValidationStatus) => {
-    switch (status) {
-      case "Validated":
-        return <Badge className="flex items-center bg-green-500 text-white"><CheckCircle2 className="mr-1 h-3 w-3" />Validated</Badge>;
-      case "Issues Found":
-        return <Badge className="flex items-center bg-yellow-500 text-white"><AlertTriangle className="mr-1 h-3 w-3" />Issues Found</Badge>;
-      case "Not Validated":
-        return <Badge variant="outline" className="flex items-center"><XCircle className="mr-1 h-3 w-3" />Not Validated</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  // Render stats for a dataset's validation
-  const renderDatasetValidationStats = () => {
-    if (!selectedDataset) {
-      return (
-        <div className="rounded-md border border-dashed border-gray-300 p-8 text-center">
-          <FileText className="mx-auto h-8 w-8 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium">No Dataset Selected</h3>
-          <p className="mt-1 text-sm text-gray-500">Please select a dataset to view validation statistics</p>
-        </div>
+  const simulateValidationProgress = () => {
+    setProgress(0);
+    setLogs([]);
+    
+    const stageTimeline = [
+      { progress: 10, log: "Connecting to validation engine..." },
+      { progress: 20, log: "Loading dataset schema..." },
+      { progress: 30, log: `Preparing ${validationMethod} validation checks...` },
+      { progress: 50, log: "Analyzing data content..." },
+      { progress: 70, log: "Running validation tests..." },
+      { progress: 90, log: "Finalizing results..." },
+    ];
+    
+    if (validationMethod === "advanced") {
+      stageTimeline.splice(3, 0, 
+        { progress: 40, log: "Checking for schema consistency..." }
       );
     }
-
-    const results = getValidationResult(selectedDataset.id);
-    const status = getValidationStatus(selectedDataset.id);
-
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="text-lg font-medium">{selectedDataset.name}</h3>
-            <p className="text-sm text-gray-500">
-              {selectedDataset.rowCount} rows × {selectedDataset.columnCount} columns
-            </p>
-          </div>
-          <div className="flex items-center space-x-2">
-            {getStatusBadge(status)}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleRunValidation}
-              disabled={isValidating}
-            >
-              {isValidating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Validating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  {status === "Not Validated" ? "Validate" : "Re-validate"}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <Separator />
-
-        {results && results.length > 0 ? (
-          <>
-            <div className="grid grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-500">Data Quality Score</div>
-                  <div className="mt-1 flex items-center">
-                    <div className="text-2xl font-bold">{calculateQualityScore(results).toFixed(1)}</div>
-                    <div className="text-sm text-gray-500 ml-1">/10</div>
-                  </div>
-                  <Progress value={calculateQualityScore(results) * 10} className="mt-2" />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-500">Issues Found</div>
-                  <div className="mt-1 text-2xl font-bold">
-                    {countIssues(results)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-500">Last Validated</div>
-                  <div className="mt-1 text-2xl font-bold">
-                    {new Date(results[0].timestamp).toLocaleDateString()}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {new Date(results[0].timestamp).toLocaleTimeString()}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="issues">Issues ({countIssues(results)})</TabsTrigger>
-              </TabsList>
-              <TabsContent value="overview" className="mt-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <h4 className="font-medium mb-2">Validation Summary</h4>
-                    {countIssues(results) === 0 ? (
-                      <Alert>
-                        <CheckCircle2 className="h-4 w-4" />
-                        <AlertTitle>No Issues Found</AlertTitle>
-                        <AlertDescription>
-                          This dataset has passed all validation checks.
-                        </AlertDescription>
-                      </Alert>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-sm">
-                          {countIssues(results)} issues were found during validation:
-                        </p>
-                        <ul className="list-disc list-inside text-sm">
-                          {results.filter(r => r.status !== "Pass").map((issue, idx) => (
-                            <li key={idx}>{issue.check}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent value="issues" className="mt-4">
-                {countIssues(results) === 0 ? (
-                  <div className="rounded-md border border-dashed border-gray-300 p-8 text-center">
-                    <CheckCircle2 className="mx-auto h-8 w-8 text-green-500" />
-                    <h3 className="mt-2 text-sm font-medium">No Issues Found</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      This dataset has passed all validation checks.
-                    </p>
-                  </div>
-                ) : (
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="rounded-md border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Check</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Details</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {results.map((validation, index) => (
-                              <TableRow key={index}>
-                                <TableCell className="font-medium">{validation.check}</TableCell>
-                                <TableCell>
-                                  {validation.status === 'Pass' ? (
-                                    <Badge className="bg-green-500 text-white">Pass</Badge>
-                                  ) : validation.status === 'Warning' ? (
-                                    <Badge className="bg-yellow-500 text-white">Warning</Badge>
-                                  ) : (
-                                    <Badge variant="destructive">Fail</Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell>{validation.details}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
-          </>
-        ) : (
-          <div className="rounded-md border border-dashed border-gray-300 p-8 text-center">
-            <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
-            <h3 className="mt-2 text-sm font-medium">Not Validated</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Click "Validate" to run validation on this dataset.
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Helper functions for calculating validation metrics
-  const calculateQualityScore = (results: ValidationResult[]): number => {
-    if (!results || results.length === 0) return 0;
     
-    // Calculate score based on pass/warning/fail ratio
-    const total = results.length;
-    const passes = results.filter(r => r.status === "Pass").length;
-    const warnings = results.filter(r => r.status === "Warning").length;
+    if (validationMethod === "custom" && customSQL) {
+      stageTimeline.splice(4, 0, 
+        { progress: 60, log: `Processing custom SQL: ${customSQL.substring(0, 30)}...` }
+      );
+    }
     
-    // Each pass is worth 1 point, each warning 0.5 points
-    const score = (passes + warnings * 0.5) / total * 10;
-    return Math.max(0, Math.min(10, score)); // Constrain between 0-10
+    let currentStage = 0;
+    
+    const progressInterval = setInterval(() => {
+      if (currentStage < stageTimeline.length) {
+        const stage = stageTimeline[currentStage];
+        setProgress(stage.progress);
+        setLogs(prev => [...prev, stage.log]);
+        currentStage++;
+      } else {
+        setProgress(100);
+        setLogs(prev => [...prev, "Validation complete!"]);
+        clearInterval(progressInterval);
+      }
+    }, 500);
+    
+    return progressInterval;
   };
 
-  const countIssues = (results: ValidationResult[]): number => {
-    if (!results) return 0;
-    return results.filter(r => r.status !== "Pass").length;
+  const handleRunValidation = async () => {
+    if (!selectedDataset) {
+      toast({
+        title: "No dataset selected",
+        description: "Please select a dataset to validate",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsRunning(true);
+    setValidationResults([]);
+    
+    const progressInterval = simulateValidationProgress();
+
+    try {
+      const results = await runValidation(
+        selectedDataset, 
+        validationMethod, 
+        validationMethod === 'custom' ? customSQL : undefined
+      );
+      
+      setProgress(100);
+      clearInterval(progressInterval);
+      
+      setValidationResults(results);
+      
+      const passCount = results.filter(r => r.status === "Pass").length;
+      const warningCount = results.filter(r => r.status === "Warning").length;
+      const failCount = results.filter(r => r.status === "Fail").length;
+      
+      toast({
+        title: "Validation complete",
+        description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
+      });
+      
+      fetchDatasets();
+    } catch (error) {
+      console.error("Validation error:", error);
+      clearInterval(progressInterval);
+      setProgress(0);
+      toast({
+        title: "Validation Failed",
+        description: error instanceof Error ? error.message : "There was an error running the validation. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRunning(false);
+    }
   };
+
+  const getResultIcon = (status: string) => {
+    switch (status) {
+      case "Pass":
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case "Fail":
+        return <XCircle className="h-5 w-5 text-red-500" />;
+      case "Warning":
+        return <AlertTriangle className="h-5 w-5 text-amber-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const getResultClass = (status: string) => {
+    switch (status) {
+      case "Pass":
+        return "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-900/20";
+      case "Fail":
+        return "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-900/20";
+      case "Warning":
+        return "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-900/20";
+      default:
+        return "";
+    }
+  };
+
+  const validationSnippet = `
+# Example Soda Core validation YAML
+profile: postgres
+datasets:
+  ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
+    checks:
+      - row_count > 0
+      - missing_count(customer_id) = 0${validationMethod === 'advanced' ? `
+      - invalid_percent(email) < 5
+      - duplicate_count(id) = 0
+      - avg_length(description) > 10
+      - schema:
+          name: string
+          age: integer
+          email: string` : ''}${validationMethod === 'custom' ? `
+      - sql:
+          query: ${customSQL.replace(/\n/g, '\n          ')}
+          metrics:
+            - row_count
+          tests:
+            - row_count > 0` : ''}
+`;
+
+  const validationDate = validationResults.length > 0 
+    ? new Date(validationResults[0].timestamp)
+    : null;
+
+  useEffect(() => {
+    if (selectedDataset && datasets.length > 0 && !isRunning && validationResults.length === 0) {
+      const fromChatbot = sessionStorage.getItem('fromChatbot');
+      if (fromChatbot) {
+        sessionStorage.removeItem('fromChatbot');
+        handleRunValidation();
+      }
+    }
+  }, [selectedDataset, datasets]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Data Validation</h1>
-          <p className="text-gray-500">
-            Validate your datasets to ensure data quality and integrity
-          </p>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Validation</h1>
+        <p className="text-slate-600 dark:text-slate-300">
+          Configure and run data quality validations on your datasets
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle>Datasets</CardTitle>
-            <CardDescription>
-              Select a dataset to validate
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingDatasets ? (
-              <div className="flex justify-center p-4">
-                <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
-              </div>
-            ) : datasets.length === 0 ? (
-              <div className="text-center p-4">
-                <FileText className="mx-auto h-8 w-8 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium">No Datasets</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Upload a dataset to begin validation
-                </p>
-              </div>
-            ) : (
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="md:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Shield className="mr-2 h-5 w-5 text-blue-600" />
+                Validation Configuration
+              </CardTitle>
+              <CardDescription>
+                Set up parameters for your validation run
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <div className="space-y-4">
-                <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a dataset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {datasets.map((dataset) => (
-                      <SelectItem key={dataset.id} value={dataset.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{dataset.name}</span>
-                          {getStatusBadge(getValidationStatus(dataset.id))}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="dataset-select">Select Dataset</Label>
+                  <select
+                    id="dataset-select"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedDataset || ""}
+                    onChange={(e) => setSelectedDataset(e.target.value)}
+                  >
+                    <option value="">Select a dataset...</option>
+                    {loading ? (
+                      <option value="" disabled>Loading datasets...</option>
+                    ) : (
+                      datasets.map((ds) => (
+                        <option key={ds.id} value={ds.id}>
+                          {ds.name} ({ds.type})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-                <div className="rounded-md bg-gray-50 p-3">
-                  <h4 className="text-sm font-medium">Validation Status</h4>
-                  <div className="mt-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center text-sm">
-                        <span className="flex items-center justify-center w-4 h-4 bg-green-500 text-white rounded-full mr-2">
-                          <CheckCircle2 className="h-3 w-3" />
-                        </span>
-                        <span>Validated</span>
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        {Object.values(validationResults).filter(results => 
-                          results.every(r => r.status === "Pass")
-                        ).length}
-                      </span>
+                <div className="space-y-2">
+                  <Label>Validation Method</Label>
+                  <RadioGroup 
+                    value={validationMethod} 
+                    onValueChange={setValidationMethod}
+                    className="flex flex-col space-y-1"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="basic" id="basic" />
+                      <Label htmlFor="basic" className="cursor-pointer">
+                        Basic Checks (Missing values, Types)
+                      </Label>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center text-sm">
-                        <span className="flex items-center justify-center w-4 h-4 bg-yellow-500 text-white rounded-full mr-2">
-                          <AlertTriangle className="h-3 w-3" />
-                        </span>
-                        <span>Issues Found</span>
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        {Object.values(validationResults).filter(results => 
-                          results.some(r => r.status !== "Pass")
-                        ).length}
-                      </span>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="advanced" id="advanced" />
+                      <Label htmlFor="advanced" className="cursor-pointer">
+                        Advanced Checks (Schema, Constraints)
+                      </Label>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center text-sm">
-                        <span className="flex items-center justify-center w-4 h-4 border border-gray-300 rounded-full mr-2">
-                          <XCircle className="h-3 w-3 text-gray-500" />
-                        </span>
-                        <span>Not Validated</span>
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        {datasets.length - Object.keys(validationResults).length}
-                      </span>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="custom" id="custom" />
+                      <Label htmlFor="custom" className="cursor-pointer">
+                        Custom SQL Checks
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {validationMethod === "custom" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="custom-sql">Custom SQL Check</Label>
+                    <Textarea
+                      id="custom-sql"
+                      placeholder="SELECT COUNT(*) FROM table WHERE condition..."
+                      value={customSQL}
+                      onChange={(e) => setCustomSQL(e.target.value)}
+                      className="min-h-[120px]"
+                    />
+                  </div>
+                )}
+
+                <Button 
+                  className="w-full"
+                  onClick={handleRunValidation}
+                  disabled={isRunning || !selectedDataset}
+                >
+                  {isRunning ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Running Validation...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      Run Validation
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Terminal className="mr-2 h-5 w-5 text-blue-600" />
+                Soda Core Configuration
+              </CardTitle>
+              <CardDescription>
+                Example YAML configuration
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="relative rounded-md bg-slate-950 p-4">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-2 top-2"
+                  onClick={() => {
+                    navigator.clipboard.writeText(validationSnippet.trim());
+                    toast({
+                      title: "Copied to clipboard",
+                      description: "YAML configuration copied to clipboard",
+                    });
+                  }}
+                >
+                  <Copy className="h-4 w-4 text-slate-400 hover:text-slate-100" />
+                </Button>
+                <pre className="overflow-x-auto text-xs text-slate-100">
+                  <code>{validationSnippet}</code>
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="md:col-span-2">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center">
+                  <Database className="mr-2 h-5 w-5 text-blue-600" />
+                  Validation Results
+                </span>
+                <div className="flex items-center">
+                  {selectedDataset && datasets.find(d => d.id === selectedDataset) && (
+                    <span className="mr-4 text-base font-normal text-slate-500">
+                      {datasets.find(d => d.id === selectedDataset)?.name}
+                    </span>
+                  )}
+                  {validationDate && (
+                    <span className="flex items-center text-sm text-slate-400">
+                      <Calendar className="mr-1 h-4 w-4" />
+                      {validationDate.toLocaleDateString() + ' ' + validationDate.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+              </CardTitle>
+              {validationResults.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-y-2">
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="flex items-center">
+                      <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
+                      <span>{validationResults.filter(r => r.status === "Pass").length} Passed</span>
+                    </div>
+                    <div className="flex items-center">
+                      <AlertTriangle className="mr-1 h-4 w-4 text-amber-500" />
+                      <span>{validationResults.filter(r => r.status === "Warning").length} Warnings</span>
+                    </div>
+                    <div className="flex items-center">
+                      <XCircle className="mr-1 h-4 w-4 text-red-500" />
+                      <span>{validationResults.filter(r => r.status === "Fail").length} Failed</span>
                     </div>
                   </div>
+                  
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => navigate('/reports')}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    View Detailed Report
+                  </Button>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>Validation Results</CardTitle>
-            <CardDescription>
-              View detailed validation results and quality metrics
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingValidationResults ? (
-              <div className="flex justify-center p-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-              </div>
-            ) : (
-              renderDatasetValidationStats()
-            )}
-          </CardContent>
-        </Card>
+              )}
+              <Separator />
+            </CardHeader>
+            <CardContent>
+              {isRunning ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Validation in progress...</span>
+                      <span className="text-sm text-slate-500">{progress}%</span>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                    {logs.map((log, i) => (
+                      <div key={i} className="py-1 pl-2 font-mono text-xs">
+                        <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : validationResults.length === 0 ? (
+                <div className="flex h-64 flex-col items-center justify-center">
+                  <Shield className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+                  <p className="text-lg font-medium">No validation results yet</p>
+                  <p className="text-sm text-slate-500">
+                    Select a dataset and run validation to see results
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {validationResults.map((result, index) => (
+                    <motion.div
+                      key={result.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 }}
+                      className={`rounded-lg border p-4 ${getResultClass(result.status)}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start">
+                          <div className="mr-3 mt-0.5">
+                            {getResultIcon(result.status)}
+                          </div>
+                          <div>
+                            <h3 className="font-medium">{result.check}</h3>
+                            <p className="text-sm text-slate-600 dark:text-slate-300">
+                              {result.details}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          <Clock className="mr-1 inline-block h-3 w-3" />
+                          {new Date(result.timestamp).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

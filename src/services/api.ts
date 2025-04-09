@@ -9,15 +9,12 @@ import {
   importTableAsDataset, 
   disconnectDatabase, 
   postgresConfig,
-  PostgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
   validateConnectionParams,
-  getActiveConnections,
-  validateDataset,
   API_URL
 } from './databaseService';
 
@@ -50,12 +47,8 @@ export {
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
   validateConnectionParams,
-  getActiveConnections,
-  validateDataset,
   API_URL
 };
 
 // Re-export types
 export type { DatasetType, ValidationResult, ComparisonResultType } from './types';
-// Re-export PostgresConfig type
-export type { PostgresConfig } from './databaseService';

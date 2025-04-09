@@ -39,57 +39,37 @@ const validateRowCount = (data: any[]): ValidationResult['status'] => {
   return data.length > 0 ? 'Pass' : 'Fail';
 };
 
-const validateMissingValues = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string, affectedColumns: string[], affectedRows: number[] } => {
+const validateMissingValues = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string } => {
   const nullCounts: Record<string, number> = {};
   let totalNulls = 0;
-  const affectedColumns: string[] = [];
-  const affectedRows: number[] = [];
   
   headers.forEach(header => {
-    const nullCount = data.filter((row, index) => {
-      const isNull = !row[header] && row[header] !== 0 && row[header] !== false;
-      if (isNull) {
-        affectedRows.push(index + 1); // +1 because row indices are 0-based but we want 1-based for human readability
-      }
-      return isNull;
-    }).length;
-    
+    const nullCount = data.filter(row => !row[header] && row[header] !== 0 && row[header] !== false).length;
     if (nullCount > 0) {
       nullCounts[header] = nullCount;
       totalNulls += nullCount;
-      affectedColumns.push(header);
     }
   });
   
   if (totalNulls === 0) {
-    return { 
-      status: 'Pass', 
-      details: 'No missing values found in any columns.', 
-      affectedColumns: [], 
-      affectedRows: [] 
-    };
+    return { status: 'Pass', details: 'No missing values found in any columns.' };
   } else if (totalNulls / (data.length * headers.length) < 0.05) {
     return { 
       status: 'Warning', 
-      details: `Found ${totalNulls} missing values across columns: ${affectedColumns.join(', ')}.`,
-      affectedColumns,
-      affectedRows: [...new Set(affectedRows)] // Remove duplicates
+      details: `Found ${totalNulls} missing values across ${Object.keys(nullCounts).length} columns.`
     };
   } else {
     return { 
       status: 'Fail', 
-      details: `High number of missing values: ${totalNulls} nulls found across columns: ${affectedColumns.join(', ')}.`,
-      affectedColumns,
-      affectedRows: [...new Set(affectedRows)] // Remove duplicates
+      details: `High number of missing values: ${totalNulls} nulls found across ${Object.keys(nullCounts).length} columns.`
     };
   }
 };
 
-const validateDataTypes = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string, affectedColumns: string[], affectedRows: number[] } => {
+const validateDataTypes = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string } => {
   // Infer column types from first few rows
   const typeMap: Record<string, string> = {};
   const inconsistentColumns: string[] = [];
-  const affectedRows: number[] = [];
   
   // Check first row to infer types
   if (data.length > 0) {
@@ -107,9 +87,7 @@ const validateDataTypes = (data: any[], headers: string[]): { status: Validation
     });
     
     // Check for type consistency
-    data.forEach((row, rowIndex) => {
-      if (rowIndex === 0) return; // Skip first row since we already used it for inference
-      
+    data.slice(1, Math.min(100, data.length)).forEach(row => {
       headers.forEach(header => {
         const value = row[header];
         if (value === null || value === undefined || value === '') return;
@@ -117,10 +95,8 @@ const validateDataTypes = (data: any[], headers: string[]): { status: Validation
         const inferredType = typeMap[header];
         if (inferredType === 'number' && isNaN(Number(value))) {
           if (!inconsistentColumns.includes(header)) inconsistentColumns.push(header);
-          affectedRows.push(rowIndex + 1); // +1 because row indices are 0-based
         } else if (inferredType === 'date' && isNaN(Date.parse(value))) {
           if (!inconsistentColumns.includes(header)) inconsistentColumns.push(header);
-          affectedRows.push(rowIndex + 1);
         }
       });
     });
@@ -129,29 +105,23 @@ const validateDataTypes = (data: any[], headers: string[]): { status: Validation
   if (inconsistentColumns.length === 0) {
     return { 
       status: 'Pass', 
-      details: 'Data types are consistent across all columns.',
-      affectedColumns: [],
-      affectedRows: []
+      details: 'Data types are consistent across all columns.' 
     };
   } else {
     return { 
       status: 'Fail', 
-      details: `Inconsistent data types found in columns: ${inconsistentColumns.join(', ')}. Affected rows: ${affectedRows.slice(0, 5).join(', ')}${affectedRows.length > 5 ? ` and ${affectedRows.length - 5} more` : ''}.`,
-      affectedColumns: inconsistentColumns,
-      affectedRows: [...new Set(affectedRows)] // Remove duplicates
+      details: `Inconsistent data types found in columns: ${inconsistentColumns.join(', ')}` 
     };
   }
 };
 
 // Enhanced AI-powered validation
-const validateWithAI = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string, affectedColumns: string[], affectedRows: number[] } => {
+const validateWithAI = (data: any[], headers: string[]): { status: ValidationResult['status'], details: string } => {
   // Simulated AI validation that would normally use a machine learning model
   // This looks for patterns and anomalies that simple rule-based validation might miss
   
   const anomalies: string[] = [];
   const insights: string[] = [];
-  const affectedColumns: string[] = [];
-  const affectedRows: number[] = [];
   
   // Check for outliers in numeric columns using IQR (simplified)
   headers.forEach(header => {
@@ -159,17 +129,16 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
     if (data.length === 0) return;
     
     // Get all numeric values in the column
-    const numericValues: {value: number, rowIndex: number}[] = data
-      .map((row, index) => ({ value: row[header], rowIndex: index + 1 }))
-      .filter(item => item.value !== null && item.value !== undefined && item.value !== '' && !isNaN(Number(item.value)))
-      .map(item => ({ value: Number(item.value), rowIndex: item.rowIndex }));
+    const values = data
+      .map(row => row[header])
+      .filter(val => val !== null && val !== undefined && val !== '' && !isNaN(Number(val)))
+      .map(val => Number(val));
     
     // Skip if not enough numeric values
-    if (numericValues.length < data.length * 0.5) return;
+    if (values.length < data.length * 0.5) return;
     
     // Sort values for quartile calculation
-    numericValues.sort((a, b) => a.value - b.value);
-    const values = numericValues.map(item => item.value);
+    values.sort((a, b) => a - b);
     
     // Calculate quartiles (simplified)
     const q1Index = Math.floor(values.length * 0.25);
@@ -182,14 +151,12 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
     const lowerBound = q1 - 1.5 * iqr;
     const upperBound = q3 + 1.5 * iqr;
     
-    // Find outliers with their row numbers
-    const outliers = numericValues.filter(item => item.value < lowerBound || item.value > upperBound);
+    // Count outliers
+    const outliers = values.filter(val => val < lowerBound || val > upperBound);
     
     if (outliers.length > 0) {
       const outlierPercentage = (outliers.length / values.length * 100).toFixed(1);
       anomalies.push(`${header}: ${outliers.length} outliers (${outlierPercentage}%) detected outside normal range.`);
-      affectedColumns.push(header);
-      outliers.forEach(outlier => affectedRows.push(outlier.rowIndex));
     }
     
     // Generate statistical insights
@@ -197,73 +164,59 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
     const min = values[0];
     const max = values[values.length - 1];
     
-    insights.push(`${header}: Range ${min.toFixed(2)} to ${max.toFixed(2)}, Average ${mean.toFixed(2)}`);
+    insights.push(`${header}: Range ${min} to ${max}, Average ${mean.toFixed(2)}`);
   });
   
   // Pattern detection in string columns (simplified)
   headers.forEach(header => {
-    // Get all string values with their row numbers
-    const stringValuesWithRows = data
-      .map((row, index) => ({ value: row[header], rowIndex: index + 1 }))
-      .filter(item => item.value !== null && item.value !== undefined && item.value !== '' && isNaN(Number(item.value)))
-      .map(item => ({ value: String(item.value), rowIndex: item.rowIndex }));
-    
-    const stringValues = stringValuesWithRows.map(item => item.value);
+    // Get all string values
+    const stringValues = data
+      .map(row => row[header])
+      .filter(val => val !== null && val !== undefined && val !== '' && isNaN(Number(val)))
+      .map(val => String(val));
     
     // Skip if not enough string values
     if (stringValues.length < data.length * 0.5) return;
     
     // Check for email patterns
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const emailLikeValuesWithRows = stringValuesWithRows.filter(item => emailPattern.test(item.value));
+    const emailLikeValues = stringValues.filter(val => emailPattern.test(val));
     
-    if (emailLikeValuesWithRows.length > 0 && emailLikeValuesWithRows.length < stringValues.length) {
-      anomalies.push(`${header}: May contain emails (${emailLikeValuesWithRows.length}/${stringValues.length}) but format is inconsistent.`);
-      affectedColumns.push(header);
-      emailLikeValuesWithRows.forEach(item => affectedRows.push(item.rowIndex));
+    if (emailLikeValues.length > 0 && emailLikeValues.length < stringValues.length) {
+      anomalies.push(`${header}: May contain emails (${emailLikeValues.length}/${stringValues.length}) but format is inconsistent.`);
     }
     
     // Check for date-like strings that aren't parsed as dates
     const datePattern = /\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/;
-    const dateLikeValuesWithRows = stringValuesWithRows.filter(item => datePattern.test(item.value) && isNaN(Date.parse(item.value)));
+    const dateLikeValues = stringValues.filter(val => datePattern.test(val) && isNaN(Date.parse(val)));
     
-    if (dateLikeValuesWithRows.length > 0) {
-      anomalies.push(`${header}: Contains ${dateLikeValuesWithRows.length} date-like values that aren't in a standard format.`);
-      affectedColumns.push(header);
-      dateLikeValuesWithRows.forEach(item => affectedRows.push(item.rowIndex));
+    if (dateLikeValues.length > 0) {
+      anomalies.push(`${header}: Contains ${dateLikeValues.length} date-like values that aren't in a standard format.`);
     }
   });
   
   if (anomalies.length === 0) {
     return {
       status: 'Pass',
-      details: 'AI validation found no anomalies or patterns of concern.',
-      affectedColumns: [],
-      affectedRows: []
+      details: 'AI validation found no anomalies or patterns of concern.'
     };
   } else if (anomalies.length <= 2) {
     return {
       status: 'Warning',
-      details: `AI validation found minor anomalies: ${anomalies.join(' ')}${insights.length > 0 ? ' Additional insights: ' + insights.join(' ') : ''}`,
-      affectedColumns: [...new Set(affectedColumns)],
-      affectedRows: [...new Set(affectedRows)]
+      details: `AI validation found minor anomalies: ${anomalies.join(' ')}${insights.length > 0 ? ' Additional insights: ' + insights.join(' ') : ''}`
     };
   } else {
     return {
       status: 'Fail',
-      details: `AI validation found multiple anomalies: ${anomalies.join(' ')}`,
-      affectedColumns: [...new Set(affectedColumns)],
-      affectedRows: [...new Set(affectedRows)]
+      details: `AI validation found multiple anomalies: ${anomalies.join(' ')}`
     };
   }
 };
 
 // Custom SQL check simulation (only for demonstration)
-const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationResult['status'], details: string, affectedColumns: string[], affectedRows: number[] } => {
+const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationResult['status'], details: string } => {
   // This is a simplified simulation of SQL execution on the data
   const lowerQuery = sqlQuery.toLowerCase();
-  const affectedColumns: string[] = [];
-  const affectedRows: number[] = [];
   
   // Check for some basic SQL patterns
   if (lowerQuery.includes('count(*)') && lowerQuery.includes('where')) {
@@ -271,32 +224,16 @@ const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationR
     const condition = lowerQuery.split('where')[1].trim();
     if (condition.includes('null')) {
       // Simulate checking for nulls
-      // For simulation, randomly select some rows as affected
-      const sampleSize = Math.min(5, Math.ceil(data.length * 0.1));
-      for (let i = 0; i < sampleSize; i++) {
-        affectedRows.push(Math.floor(Math.random() * data.length) + 1);
-      }
-      
-      // Extract column name from condition if possible
-      const columnMatch = condition.match(/(\w+)\s+is\s+null/i);
-      if (columnMatch && columnMatch[1]) {
-        affectedColumns.push(columnMatch[1]);
-      }
-      
       return { 
         status: Math.random() > 0.5 ? 'Pass' : 'Fail',
-        details: `Custom SQL query executed successfully. Checked for NULL values in ${affectedColumns.length > 0 ? `column: ${affectedColumns[0]}` : 'columns'}.`,
-        affectedColumns,
-        affectedRows: [...new Set(affectedRows)]
+        details: 'Custom SQL query executed successfully. Checked for NULL values.'
       };
     }
   }
   
   return { 
     status: Math.random() > 0.7 ? 'Pass' : 'Fail',
-    details: 'Custom SQL query executed. Note: Client-side SQL execution is limited.',
-    affectedColumns,
-    affectedRows
+    details: 'Custom SQL query executed. Note: Client-side SQL execution is limited.'
   };
 };
 
@@ -365,21 +302,9 @@ export const runValidation = (
           });
           
           // Simple duplicate check
-          const rowSignatures = dataset.content.map(row => 
+          const distinctCount = new Set(dataset.content.map(row => 
             JSON.stringify(Object.values(row).slice(0, 2))
-          );
-          const distinctCount = new Set(rowSignatures).size;
-          const duplicateRows: number[] = [];
-          
-          // Find duplicate rows
-          const seen = new Set<string>();
-          rowSignatures.forEach((signature, index) => {
-            if (seen.has(signature)) {
-              duplicateRows.push(index + 1); // +1 for 1-based row numbers
-            } else {
-              seen.add(signature);
-            }
-          });
+          )).size;
           
           const hasDuplicates = distinctCount < dataset.content.length;
           results.push({
@@ -389,7 +314,7 @@ export const runValidation = (
             check: 'Duplicate detection',
             status: hasDuplicates ? 'Warning' : 'Pass',
             details: hasDuplicates 
-              ? `Found potential duplicates: ${dataset.content.length - distinctCount} rows may be duplicated. Affected rows: ${duplicateRows.slice(0, 5).join(', ')}${duplicateRows.length > 5 ? ` and ${duplicateRows.length - 5} more` : ''}.` 
+              ? `Found potential duplicates: ${dataset.content.length - distinctCount} rows may be duplicated.` 
               : 'No duplicates detected in the first few columns.'
           });
           
