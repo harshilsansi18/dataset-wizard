@@ -44,7 +44,6 @@ export {
   importTableAsDataset,
   disconnectDatabase,
   postgresConfig,
-  PostgresConfig,
   initDatabaseConnection,
   getImportedDatasets,
   refreshImportedDatasets,
@@ -58,3 +57,5 @@ export {
 
 // Re-export types
 export type { DatasetType, ValidationResult, ComparisonResultType } from './types';
+// Re-export PostgresConfig type
+export type { PostgresConfig } from './databaseService';
