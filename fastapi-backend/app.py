@@ -108,6 +108,19 @@ async def validate_sql(query: str):
                 "operation": "not_null_check",
                 "column": column
             }
+        
+        # Check for IN clause
+        in_clause = re.search(r"(\w+)\s+in\s+\(\s*(.*?)\s*\)", query.lower())
+        if in_clause:
+            column = in_clause.group(1)
+            values = in_clause.group(2)
+            return {
+                "valid": True,
+                "message": f"Query checks if column '{column}' is IN a list of values",
+                "operation": "in_clause",
+                "column": column,
+                "values": values
+            }
             
         return {"valid": True, "message": "Query appears to be valid"}
     except Exception as e:
@@ -123,4 +136,3 @@ if __name__ == "__main__":
         port=ServerConfig.PORT,
         reload=True
     )
-

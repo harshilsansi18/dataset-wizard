@@ -1,4 +1,3 @@
-
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
 import { toast } from "@/hooks/use-toast";
@@ -213,7 +212,7 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
   }
 };
 
-// Improved Custom SQL validation
+// Improved Custom SQL validation with support for IN clause
 const validateCustomSQL = (data: any[], sqlQuery: string, headers: string[]): { status: ValidationResult['status'], details: string, affectedRows?: number[] } => {
   // This is a more sophisticated simulation of SQL execution on the data
   const lowerQuery = sqlQuery.toLowerCase();
@@ -221,101 +220,149 @@ const validateCustomSQL = (data: any[], sqlQuery: string, headers: string[]): { 
   
   try {
     // Parse and interpret the SQL query in a basic way
-    if (lowerQuery.includes('select') && lowerQuery.includes('where')) {
-      // Extract condition from the WHERE clause
-      let condition = lowerQuery.split('where')[1].trim();
+    if (lowerQuery.includes('select') && lowerQuery.includes('from')) {
+      // Extract selected columns
+      let selectPart = lowerQuery.split('from')[0].replace('select', '').trim();
+      const selectedColumns = selectPart.split(',').map(col => col.trim());
       
-      // Check for specific conditions we can handle
-      if (condition.includes('is not null')) {
-        // Get the column name
-        const colMatch = condition.match(/(\w+)\s+is\s+not\s+null/i);
-        const columnName = colMatch ? colMatch[1] : null;
-        
-        if (columnName && headers.includes(columnName)) {
-          // Find rows where the column is not null
-          data.forEach((row, index) => {
-            if (row[columnName] !== null && row[columnName] !== undefined && row[columnName] !== '') {
-              affectedRows.push(index + 1); // Adding 1 to convert from 0-based to 1-based index
-            }
-          });
-          
-          return { 
-            status: affectedRows.length > 0 ? 'Pass' : 'Fail',
-            details: `Found ${affectedRows.length} rows where ${columnName} is not NULL.`,
-            affectedRows: affectedRows
-          };
-        }
-      } 
-      else if (condition.includes('is null')) {
-        // Get the column name
-        const colMatch = condition.match(/(\w+)\s+is\s+null/i);
-        const columnName = colMatch ? colMatch[1] : null;
-        
-        if (columnName && headers.includes(columnName)) {
-          // Find rows where the column is null
-          data.forEach((row, index) => {
-            if (row[columnName] === null || row[columnName] === undefined || row[columnName] === '') {
-              affectedRows.push(index + 1); // Adding 1 to convert from 0-based to 1-based index
-            }
-          });
-          
-          return { 
-            status: 'Warning',
-            details: `Found ${affectedRows.length} rows where ${columnName} IS NULL.`,
-            affectedRows: affectedRows
-          };
-        }
+      // Check if we have a WHERE clause
+      let whereCondition = "";
+      if (lowerQuery.includes('where')) {
+        whereCondition = lowerQuery.split('where')[1].trim();
       }
-      else if (condition.includes('like')) {
-        // Get the column name and pattern
-        const likeMatch = condition.match(/(\w+)\s+like\s+['"](.*?)['"]|(\w+)\s+like\s+([\w%]+)/i);
-        if (likeMatch) {
-          const columnName = likeMatch[1] || likeMatch[3];
-          let pattern = likeMatch[2] || likeMatch[4] || '';
+      
+      // Process different types of WHERE conditions
+      if (whereCondition) {
+        // Handle IS NOT NULL condition
+        if (whereCondition.includes('is not null')) {
+          const colMatch = whereCondition.match(/(\w+)\s+is\s+not\s+null/i);
+          const columnName = colMatch ? colMatch[1] : null;
           
           if (columnName && headers.includes(columnName)) {
-            // Convert SQL LIKE pattern to JavaScript regex
-            pattern = pattern.replace(/%/g, '.*').replace(/_/g, '.');
-            const regex = new RegExp(`^${pattern}$`, 'i');
-            
-            // Find matching rows
             data.forEach((row, index) => {
-              if (row[columnName] && regex.test(String(row[columnName]))) {
+              if (row[columnName] !== null && row[columnName] !== undefined && row[columnName] !== '') {
                 affectedRows.push(index + 1);
               }
             });
             
             return { 
-              status: affectedRows.length > 0 ? 'Pass' : 'Warning',
-              details: `Found ${affectedRows.length} rows where ${columnName} matches the pattern.`,
+              status: affectedRows.length > 0 ? 'Pass' : 'Fail',
+              details: `Found ${affectedRows.length} rows where ${columnName} is not NULL.`,
+              affectedRows: affectedRows
+            };
+          }
+        } 
+        // Handle IS NULL condition
+        else if (whereCondition.includes('is null')) {
+          const colMatch = whereCondition.match(/(\w+)\s+is\s+null/i);
+          const columnName = colMatch ? colMatch[1] : null;
+          
+          if (columnName && headers.includes(columnName)) {
+            data.forEach((row, index) => {
+              if (row[columnName] === null || row[columnName] === undefined || row[columnName] === '') {
+                affectedRows.push(index + 1);
+              }
+            });
+            
+            return { 
+              status: 'Warning',
+              details: `Found ${affectedRows.length} rows where ${columnName} IS NULL.`,
               affectedRows: affectedRows
             };
           }
         }
-      }
-      else if (condition.includes('=')) {
+        // Handle LIKE condition
+        else if (whereCondition.includes('like')) {
+          const likeMatch = whereCondition.match(/(\w+)\s+like\s+['"](.*?)['"]|(\w+)\s+like\s+([\w%]+)/i);
+          if (likeMatch) {
+            const columnName = likeMatch[1] || likeMatch[3];
+            let pattern = likeMatch[2] || likeMatch[4] || '';
+            
+            if (columnName && headers.includes(columnName)) {
+              pattern = pattern.replace(/%/g, '.*').replace(/_/g, '.');
+              const regex = new RegExp(`^${pattern}$`, 'i');
+              
+              data.forEach((row, index) => {
+                if (row[columnName] && regex.test(String(row[columnName]))) {
+                  affectedRows.push(index + 1);
+                }
+              });
+              
+              return { 
+                status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+                details: `Found ${affectedRows.length} rows where ${columnName} matches the pattern.`,
+                affectedRows: affectedRows
+              };
+            }
+          }
+        }
         // Handle equality comparison
-        const eqMatch = condition.match(/(\w+)\s*=\s*['"](.*?)['"]|(\w+)\s*=\s*(-?\d+\.?\d*)/i);
-        if (eqMatch) {
-          const columnName = eqMatch[1] || eqMatch[3];
-          const value = eqMatch[2] !== undefined ? eqMatch[2] : Number(eqMatch[4]);
+        else if (whereCondition.includes('=')) {
+          const eqMatch = whereCondition.match(/(\w+)\s*=\s*['"](.*?)['"]|(\w+)\s*=\s*(-?\d+\.?\d*)/i);
+          if (eqMatch) {
+            const columnName = eqMatch[1] || eqMatch[3];
+            const value = eqMatch[2] !== undefined ? eqMatch[2] : Number(eqMatch[4]);
+            
+            if (columnName && headers.includes(columnName)) {
+              data.forEach((row, index) => {
+                if (row[columnName] == value) { // Using == for type coercion
+                  affectedRows.push(index + 1);
+                }
+              });
+              
+              return { 
+                status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+                details: `Found ${affectedRows.length} rows where ${columnName} = ${value}.`,
+                affectedRows: affectedRows
+              };
+            }
+          }
+        }
+        // Handle IN clause - NEW FEATURE
+        else if (whereCondition.includes(' in ')) {
+          // Extract column name and values in the IN clause
+          // Pattern matches: column_name IN ('value1', 'value2') or column_name IN (value1, value2)
+          const inMatch = whereCondition.match(/(\w+)\s+in\s+\(\s*(.*?)\s*\)/i);
           
-          if (columnName && headers.includes(columnName)) {
-            // Find matching rows
-            data.forEach((row, index) => {
-              if (row[columnName] == value) { // Using == for type coercion
-                affectedRows.push(index + 1);
-              }
+          if (inMatch) {
+            const columnName = inMatch[1];
+            // Parse the values inside the parentheses
+            let inValues: string[] = [];
+            
+            // Extract values from parentheses, handling both quoted and unquoted values
+            const valuesStr = inMatch[2];
+            const valueMatches = valuesStr.match(/['"]([^'"]+)['"]/g) || valuesStr.match(/([^,\s]+)/g) || [];
+            
+            inValues = valueMatches.map(v => {
+              // Remove quotes if present
+              return v.replace(/^['"]|['"]$/g, '');
             });
             
-            return { 
-              status: affectedRows.length > 0 ? 'Pass' : 'Warning',
-              details: `Found ${affectedRows.length} rows where ${columnName} = ${value}.`,
-              affectedRows: affectedRows
-            };
+            if (columnName && headers.includes(columnName) && inValues.length > 0) {
+              data.forEach((row, index) => {
+                const rowValue = String(row[columnName]);
+                if (inValues.includes(rowValue)) {
+                  affectedRows.push(index + 1);
+                }
+              });
+              
+              return { 
+                status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+                details: `Found ${affectedRows.length} rows where ${columnName} is in (${inValues.join(', ')}).`,
+                affectedRows: affectedRows
+              };
+            }
           }
         }
       }
+      
+      // If we couldn't match a specific condition but have a valid SELECT query,
+      // return a more generic message about what columns were selected
+      return { 
+        status: 'Pass',
+        details: `Selected columns: ${selectedColumns.join(', ')}. Client-side SQL execution has limited capabilities.`,
+        affectedRows: []
+      };
     }
     
     // If we got here, we couldn't properly interpret the query
