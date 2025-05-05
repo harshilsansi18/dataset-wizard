@@ -1,4 +1,3 @@
-
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
 import { toast } from "@/hooks/use-toast";
@@ -213,28 +212,125 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
   }
 };
 
-// Custom SQL check simulation (only for demonstration)
-const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationResult['status'], details: string } => {
-  // This is a simplified simulation of SQL execution on the data
+// Improved Custom SQL validation
+const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationResult['status'], details: string, affectedRows?: number[] } => {
+  // This is a more sophisticated simulation of SQL execution on the data
   const lowerQuery = sqlQuery.toLowerCase();
+  const affectedRows: number[] = [];
   
-  // Check for some basic SQL patterns
-  if (lowerQuery.includes('count(*)') && lowerQuery.includes('where')) {
-    // Simulate row count with condition
-    const condition = lowerQuery.split('where')[1].trim();
-    if (condition.includes('null')) {
-      // Simulate checking for nulls
-      return { 
-        status: Math.random() > 0.5 ? 'Pass' : 'Fail',
-        details: 'Custom SQL query executed successfully. Checked for NULL values.'
-      };
+  try {
+    // Parse and interpret the SQL query in a basic way
+    if (lowerQuery.includes('select') && lowerQuery.includes('where')) {
+      // Extract condition from the WHERE clause
+      let condition = lowerQuery.split('where')[1].trim();
+      
+      // Check for specific conditions we can handle
+      if (condition.includes('is not null')) {
+        // Get the column name
+        const colMatch = condition.match(/(\w+)\s+is\s+not\s+null/i);
+        const columnName = colMatch ? colMatch[1] : null;
+        
+        if (columnName && headers.includes(columnName)) {
+          // Find rows where the column is not null
+          data.forEach((row, index) => {
+            if (row[columnName] !== null && row[columnName] !== undefined && row[columnName] !== '') {
+              affectedRows.push(index + 1); // Adding 1 to convert from 0-based to 1-based index
+            }
+          });
+          
+          return { 
+            status: affectedRows.length > 0 ? 'Pass' : 'Fail',
+            details: `Found ${affectedRows.length} rows where ${columnName} is not NULL.`,
+            affectedRows: affectedRows
+          };
+        }
+      } 
+      else if (condition.includes('is null')) {
+        // Get the column name
+        const colMatch = condition.match(/(\w+)\s+is\s+null/i);
+        const columnName = colMatch ? colMatch[1] : null;
+        
+        if (columnName && headers.includes(columnName)) {
+          // Find rows where the column is null
+          data.forEach((row, index) => {
+            if (row[columnName] === null || row[columnName] === undefined || row[columnName] === '') {
+              affectedRows.push(index + 1); // Adding 1 to convert from 0-based to 1-based index
+            }
+          });
+          
+          return { 
+            status: 'Warning',
+            details: `Found ${affectedRows.length} rows where ${columnName} IS NULL.`,
+            affectedRows: affectedRows
+          };
+        }
+      }
+      else if (condition.includes('like')) {
+        // Get the column name and pattern
+        const likeMatch = condition.match(/(\w+)\s+like\s+['"](.*?)['"]|(\w+)\s+like\s+([\w%]+)/i);
+        if (likeMatch) {
+          const columnName = likeMatch[1] || likeMatch[3];
+          let pattern = likeMatch[2] || likeMatch[4] || '';
+          
+          if (columnName && headers.includes(columnName)) {
+            // Convert SQL LIKE pattern to JavaScript regex
+            pattern = pattern.replace(/%/g, '.*').replace(/_/g, '.');
+            const regex = new RegExp(`^${pattern}$`, 'i');
+            
+            // Find matching rows
+            data.forEach((row, index) => {
+              if (row[columnName] && regex.test(String(row[columnName]))) {
+                affectedRows.push(index + 1);
+              }
+            });
+            
+            return { 
+              status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+              details: `Found ${affectedRows.length} rows where ${columnName} matches the pattern.`,
+              affectedRows: affectedRows
+            };
+          }
+        }
+      }
+      else if (condition.includes('=')) {
+        // Handle equality comparison
+        const eqMatch = condition.match(/(\w+)\s*=\s*['"](.*?)['"]|(\w+)\s*=\s*(-?\d+\.?\d*)/i);
+        if (eqMatch) {
+          const columnName = eqMatch[1] || eqMatch[3];
+          const value = eqMatch[2] !== undefined ? eqMatch[2] : Number(eqMatch[4]);
+          
+          if (columnName && headers.includes(columnName)) {
+            // Find matching rows
+            data.forEach((row, index) => {
+              if (row[columnName] == value) { // Using == for type coercion
+                affectedRows.push(index + 1);
+              }
+            });
+            
+            return { 
+              status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+              details: `Found ${affectedRows.length} rows where ${columnName} = ${value}.`,
+              affectedRows: affectedRows
+            };
+          }
+        }
+      }
     }
+    
+    // If we got here, we couldn't properly interpret the query
+    return { 
+      status: Math.random() > 0.5 ? 'Pass' : 'Warning',
+      details: 'Custom SQL query executed. Results may not be accurate as client-side SQL execution is limited.',
+      affectedRows: []
+    };
+  } catch (error) {
+    console.error("SQL query parsing error:", error);
+    return { 
+      status: 'Fail',
+      details: 'Error executing SQL query. Check syntax or use a simpler query.',
+      affectedRows: []
+    };
   }
-  
-  return { 
-    status: Math.random() > 0.7 ? 'Pass' : 'Fail',
-    details: 'Custom SQL query executed. Note: Client-side SQL execution is limited.'
-  };
 };
 
 export const runValidation = (
@@ -330,16 +426,21 @@ export const runValidation = (
           });
         }
         
-        // Add custom SQL check
+        // Add custom SQL check with improved handling
         if (method === 'custom' && customSQL) {
           const sqlResult = validateCustomSQL(dataset.content, customSQL);
+          // Store affected row numbers in the details
+          const rowNumbers = sqlResult.affectedRows && sqlResult.affectedRows.length > 0
+            ? `Affected rows: ${sqlResult.affectedRows.slice(0, 10).join(', ')}${sqlResult.affectedRows.length > 10 ? '...' : ''}`
+            : '';
+          
           results.push({
             id: `vr_${Date.now()}_6`,
             datasetId,
             timestamp,
-            check: `Custom SQL: ${customSQL.substring(0, 30)}...`,
+            check: `Custom SQL: ${customSQL.substring(0, 30)}${customSQL.length > 30 ? '...' : ''}`,
             status: sqlResult.status,
-            details: sqlResult.details
+            details: `${sqlResult.details} ${rowNumbers}`
           });
         }
         

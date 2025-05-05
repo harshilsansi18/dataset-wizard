@@ -49,6 +49,23 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
 
+@app.get("/validate-sql")
+async def validate_sql(query: str):
+    """Validate SQL query syntax"""
+    try:
+        # This is a simplified validation. In a real world app,
+        # you would use a proper SQL parser to validate the syntax.
+        if not query or len(query) < 5:
+            return {"valid": False, "message": "Query is too short"}
+            
+        if not query.lower().strip().startswith("select"):
+            return {"valid": False, "message": "Only SELECT queries are allowed"}
+            
+        return {"valid": True, "message": "Query appears to be valid"}
+    except Exception as e:
+        logger.error(f"SQL validation error: {str(e)}")
+        return {"valid": False, "message": f"Error: {str(e)}"}
+
 if __name__ == "__main__":
     import uvicorn
     logger.info(f"Starting server on {ServerConfig.HOST}:{ServerConfig.PORT}")
