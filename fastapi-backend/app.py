@@ -87,15 +87,30 @@ async def validate_sql(query: str):
             if re.search(pattern, query.lower()):
                 return {"valid": False, "message": message}
         
+        # Extract selected columns
+        select_match = re.search(r"select\s+(.*?)\s+from", query.lower())
+        selected_columns = []
+        if select_match:
+            cols = select_match.group(1).split(',')
+            selected_columns = [col.strip() for col in cols]
+            if "*" in selected_columns:
+                selected_columns = ["all columns"]
+        
+        # Extract table name
+        from_match = re.search(r"from\s+(\w+)", query.lower())
+        table_name = from_match.group(1) if from_match else "unknown"
+                
         # Check for IS NULL syntax
         null_check = re.search(r"(\w+)\s+is\s+null", query.lower())
         if null_check:
             column = null_check.group(1)
             return {
                 "valid": True, 
-                "message": f"Query checks if column '{column}' IS NULL",
+                "message": f"Query would return {', '.join(selected_columns)} from {table_name} where {column} IS NULL",
                 "operation": "null_check",
-                "column": column
+                "column": column,
+                "selected_columns": selected_columns,
+                "table": table_name
             }
             
         # Check for IS NOT NULL syntax
@@ -104,9 +119,11 @@ async def validate_sql(query: str):
             column = not_null_check.group(1)
             return {
                 "valid": True, 
-                "message": f"Query checks if column '{column}' IS NOT NULL",
+                "message": f"Query would return {', '.join(selected_columns)} from {table_name} where {column} IS NOT NULL",
                 "operation": "not_null_check",
-                "column": column
+                "column": column,
+                "selected_columns": selected_columns,
+                "table": table_name
             }
         
         # Check for IN clause
@@ -114,15 +131,43 @@ async def validate_sql(query: str):
         if in_clause:
             column = in_clause.group(1)
             values = in_clause.group(2)
+            values_list = re.findall(r"'([^']*)'|([^',\s]+)", values)
+            parsed_values = [v[0] if v[0] else v[1] for v in values_list]
+            
             return {
                 "valid": True,
-                "message": f"Query checks if column '{column}' is IN a list of values",
+                "message": f"Query would return {', '.join(selected_columns)} from {table_name} where {column} is in ({', '.join(parsed_values)})",
                 "operation": "in_clause",
                 "column": column,
-                "values": values
+                "values": parsed_values,
+                "selected_columns": selected_columns,
+                "table": table_name
             }
             
-        return {"valid": True, "message": "Query appears to be valid"}
+        # Check for column comparison
+        comparison_match = re.search(r"(\w+)\s*(=|!=|>|<|>=|<=)\s*(['\w]+)", query.lower())
+        if comparison_match:
+            column = comparison_match.group(1)
+            operator = comparison_match.group(2)
+            value = comparison_match.group(3).strip("'")
+            
+            return {
+                "valid": True,
+                "message": f"Query would return {', '.join(selected_columns)} from {table_name} where {column} {operator} {value}",
+                "operation": "comparison",
+                "column": column,
+                "operator": operator,
+                "value": value,
+                "selected_columns": selected_columns,
+                "table": table_name
+            }
+            
+        return {
+            "valid": True, 
+            "message": f"Query would select {', '.join(selected_columns)} from {table_name}",
+            "selected_columns": selected_columns,
+            "table": table_name
+        }
     except Exception as e:
         logger.error(f"SQL validation error: {str(e)}")
         return {"valid": False, "message": f"Error: {str(e)}"}

@@ -212,9 +212,129 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
   }
 };
 
-// Improved Custom SQL validation with support for IN clause
-const validateCustomSQL = (data: any[], sqlQuery: string, headers: string[]): { status: ValidationResult['status'], details: string, affectedRows?: number[] } => {
-  // This is a more sophisticated simulation of SQL execution on the data
+// Improved Custom SQL validation with more user feedback
+const validateCustomSQL = async (data: any[], sqlQuery: string, headers: string[]): Promise<{ status: ValidationResult['status'], details: string, affectedRows?: number[] }> => {
+  // Use the backend API for SQL validation if available
+  try {
+    // First try to validate the query via backend API
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const response = await fetch(`${API_URL}/validate-sql?query=${encodeURIComponent(sqlQuery)}`);
+    const validation = await response.json();
+    
+    if (response.ok) {
+      if (validation.valid) {
+        const affectedRows: number[] = [];
+        
+        // For now, we'll try to simulate some basic SQL execution on the client side
+        // In a real application, this would be better handled by the backend
+        
+        // Handle different types of operations detected by the backend
+        if (validation.operation === "null_check" && validation.column) {
+          // Find rows where the column is NULL
+          data.forEach((row, index) => {
+            if (row[validation.column] === null || row[validation.column] === undefined || row[validation.column] === '') {
+              affectedRows.push(index + 1);
+            }
+          });
+          
+          return { 
+            status: affectedRows.length > 0 ? 'Warning' : 'Pass',
+            details: validation.message || `Found ${affectedRows.length} rows where ${validation.column} IS NULL.`,
+            affectedRows: affectedRows
+          };
+        } 
+        else if (validation.operation === "not_null_check" && validation.column) {
+          // Find rows where the column is NOT NULL
+          data.forEach((row, index) => {
+            if (row[validation.column] !== null && row[validation.column] !== undefined && row[validation.column] !== '') {
+              affectedRows.push(index + 1);
+            }
+          });
+          
+          return { 
+            status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+            details: validation.message || `Found ${affectedRows.length} rows where ${validation.column} IS NOT NULL.`,
+            affectedRows: affectedRows
+          };
+        }
+        else if (validation.operation === "in_clause" && validation.column && validation.values) {
+          // Handle IN clause operation
+          const values = Array.isArray(validation.values) ? validation.values : [validation.values];
+          
+          data.forEach((row, index) => {
+            const rowValue = String(row[validation.column]);
+            if (values.includes(rowValue)) {
+              affectedRows.push(index + 1);
+            }
+          });
+          
+          return { 
+            status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+            details: validation.message || `Found ${affectedRows.length} rows where ${validation.column} is in (${values.join(', ')}).`,
+            affectedRows: affectedRows
+          };
+        }
+        else if (validation.operation === "comparison" && validation.column) {
+          // Handle comparison operations
+          const { operator, value } = validation;
+          
+          data.forEach((row, index) => {
+            const rowValue = row[validation.column];
+            let matches = false;
+            
+            switch (operator) {
+              case "=":
+                matches = String(rowValue) === String(value);
+                break;
+              case "!=":
+                matches = String(rowValue) !== String(value);
+                break;
+              case ">":
+                matches = Number(rowValue) > Number(value);
+                break;
+              case "<":
+                matches = Number(rowValue) < Number(value);
+                break;
+              case ">=":
+                matches = Number(rowValue) >= Number(value);
+                break;
+              case "<=":
+                matches = Number(rowValue) <= Number(value);
+                break;
+            }
+            
+            if (matches) {
+              affectedRows.push(index + 1);
+            }
+          });
+          
+          return { 
+            status: affectedRows.length > 0 ? 'Pass' : 'Warning',
+            details: validation.message || `Found ${affectedRows.length} rows matching the condition.`,
+            affectedRows: affectedRows
+          };
+        }
+        
+        // For any valid query without specific operation handling
+        return { 
+          status: 'Pass',
+          details: validation.message || `SQL query is valid. Selected columns: ${validation.selected_columns?.join(', ') || 'unknown'}`,
+          affectedRows: []
+        };
+      } else {
+        // Query was found to be invalid by the backend
+        return { 
+          status: 'Fail',
+          details: validation.message || 'Invalid SQL query syntax.'
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Error validating SQL with backend:", error);
+    // Fall back to client-side processing if backend validation fails
+  }
+  
+  // Client-side fallback processing when backend is not available
   const lowerQuery = sqlQuery.toLowerCase();
   const affectedRows: number[] = [];
   
@@ -476,7 +596,7 @@ export const runValidation = (
         
         // Add custom SQL check with improved handling
         if (method === 'custom' && customSQL) {
-          const sqlResult = validateCustomSQL(dataset.content, customSQL, dataset.headers);
+          const sqlResult = await validateCustomSQL(dataset.content, customSQL, dataset.headers);
           // Store affected row numbers in the details
           const rowNumbers = sqlResult.affectedRows && sqlResult.affectedRows.length > 0
             ? `Affected rows: ${sqlResult.affectedRows.slice(0, 10).join(', ')}${sqlResult.affectedRows.length > 10 ? '...' : ''}`
