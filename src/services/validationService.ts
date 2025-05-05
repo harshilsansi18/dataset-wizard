@@ -1,3 +1,4 @@
+
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
 import { toast } from "@/hooks/use-toast";
@@ -213,7 +214,7 @@ const validateWithAI = (data: any[], headers: string[]): { status: ValidationRes
 };
 
 // Improved Custom SQL validation
-const validateCustomSQL = (data: any[], sqlQuery: string): { status: ValidationResult['status'], details: string, affectedRows?: number[] } => {
+const validateCustomSQL = (data: any[], sqlQuery: string, headers: string[]): { status: ValidationResult['status'], details: string, affectedRows?: number[] } => {
   // This is a more sophisticated simulation of SQL execution on the data
   const lowerQuery = sqlQuery.toLowerCase();
   const affectedRows: number[] = [];
@@ -428,7 +429,7 @@ export const runValidation = (
         
         // Add custom SQL check with improved handling
         if (method === 'custom' && customSQL) {
-          const sqlResult = validateCustomSQL(dataset.content, customSQL);
+          const sqlResult = validateCustomSQL(dataset.content, customSQL, dataset.headers);
           // Store affected row numbers in the details
           const rowNumbers = sqlResult.affectedRows && sqlResult.affectedRows.length > 0
             ? `Affected rows: ${sqlResult.affectedRows.slice(0, 10).join(', ')}${sqlResult.affectedRows.length > 10 ? '...' : ''}`

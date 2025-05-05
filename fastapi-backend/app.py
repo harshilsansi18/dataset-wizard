@@ -5,6 +5,7 @@ from routes import router
 import logging
 from config import ServerConfig
 import os
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -53,13 +54,60 @@ async def health_check():
 async def validate_sql(query: str):
     """Validate SQL query syntax"""
     try:
-        # This is a simplified validation. In a real world app,
-        # you would use a proper SQL parser to validate the syntax.
+        # Enhanced SQL validation with more detailed errors
+        logger.info(f"Validating SQL query: {query}")
+        
         if not query or len(query) < 5:
             return {"valid": False, "message": "Query is too short"}
             
+        # Check if query starts with SELECT
         if not query.lower().strip().startswith("select"):
             return {"valid": False, "message": "Only SELECT queries are allowed"}
+        
+        # Basic SQL syntax validation using regex patterns
+        # Check for balanced parentheses
+        if query.count('(') != query.count(')'):
+            return {"valid": False, "message": "Unbalanced parentheses in query"}
+        
+        # Check for basic SQL structure
+        if not re.search(r"select\s+.+\s+from\s+.+", query.lower()):
+            return {"valid": False, "message": "Query must include both SELECT and FROM clauses"}
+            
+        # Detect common SQL syntax errors
+        common_errors = [
+            (r"where\s+and", "Found 'WHERE AND' - remove the extra AND"),
+            (r"where\s+or", "Found 'WHERE OR' - remove the extra OR"),
+            (r"from\s+from", "Duplicate FROM clause"),
+            (r"select\s+select", "Duplicate SELECT clause"),
+            (r"where\s+where", "Duplicate WHERE clause"),
+            (r"from\s*$", "FROM clause cannot be at the end without a table name")
+        ]
+        
+        for pattern, message in common_errors:
+            if re.search(pattern, query.lower()):
+                return {"valid": False, "message": message}
+        
+        # Check for IS NULL syntax
+        null_check = re.search(r"(\w+)\s+is\s+null", query.lower())
+        if null_check:
+            column = null_check.group(1)
+            return {
+                "valid": True, 
+                "message": f"Query checks if column '{column}' IS NULL",
+                "operation": "null_check",
+                "column": column
+            }
+            
+        # Check for IS NOT NULL syntax
+        not_null_check = re.search(r"(\w+)\s+is\s+not\s+null", query.lower())
+        if not_null_check:
+            column = not_null_check.group(1)
+            return {
+                "valid": True, 
+                "message": f"Query checks if column '{column}' IS NOT NULL",
+                "operation": "not_null_check",
+                "column": column
+            }
             
         return {"valid": True, "message": "Query appears to be valid"}
     except Exception as e:
@@ -75,3 +123,4 @@ if __name__ == "__main__":
         port=ServerConfig.PORT,
         reload=True
     )
+
