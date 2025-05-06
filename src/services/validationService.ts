@@ -1,3 +1,4 @@
+
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
 import { toast } from "@/hooks/use-toast";
@@ -33,46 +34,488 @@ const saveToStorage = (data: any) => {
   }
 };
 
-// API URL for backend services
+// API URL for backend services (no longer needed for extended validation)
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// Run extended validation using the backend
-const runExtendedValidation = async (dataset: DatasetType, validationType: string): Promise<ValidationResult[]> => {
-  try {
-    const response = await fetch(`${API_URL}/extended-validation`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        validationType,
-        content: dataset.content,
-        headers: dataset.headers
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+// Client-side implementation of format_checks validation
+const runFormatChecksValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers } = dataset;
+  
+  // Check name fields for proper format (uppercase)
+  const nameFields = headers.filter(col => 
+    col && ["name", "first", "last", "suffix"].some(x => col.toLowerCase().includes(x))
+  );
+  
+  for (const field of nameFields) {
+    try {
+      const validValues = content.filter(row => 
+        row[field] && String(row[field]).toUpperCase() === String(row[field])
+      );
+      const invalidValues = content.filter(row => 
+        row[field] && String(row[field]).toUpperCase() !== String(row[field])
+      );
+      
+      const uppercaseCheck = invalidValues.length === 0;
+      
+      results.push({
+        id: `vr_${Date.now()}_format_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Format check for ${field}`,
+        status: uppercaseCheck ? 'Pass' : 'Fail',
+        details: uppercaseCheck 
+          ? `All values in ${field} are uppercase` 
+          : `Some values in ${field} are not uppercase`
+      });
+    } catch (error) {
+      console.error(`Error in name field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_format_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Format check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate ${field} format: ${String(error)}`
+      });
     }
-    
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.message || 'Unknown error in extended validation');
+  }
+  
+  // Check date fields format (YYYY/MM/DD)
+  const dateFields = headers.filter(col => 
+    col && ["date", "dob", "birth"].some(x => col.toLowerCase().includes(x))
+  );
+  
+  for (const field of dateFields) {
+    try {
+      let dateFormatValid = true;
+      const invalidDates: string[] = [];
+      
+      for (const row of content) {
+        const val = row[field];
+        if (val) {
+          try {
+            // Check if date format is YYYY/MM/DD or similar
+            if (!String(val).match(/^\d{4}[/\-]\d{1,2}[/\-]\d{1,2}$/)) {
+              dateFormatValid = false;
+              invalidDates.push(String(val));
+            }
+          } catch {
+            dateFormatValid = false;
+            invalidDates.push(String(val));
+          }
+        }
+      }
+      
+      const sample = invalidDates.slice(0, 3);
+      results.push({
+        id: `vr_${Date.now()}_date_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Date format check for ${field}`,
+        status: dateFormatValid ? 'Pass' : 'Fail',
+        details: dateFormatValid 
+          ? `All dates in ${field} follow YYYY/MM/DD format` 
+          : `Invalid date formats found: ${sample.join(', ')}${invalidDates.length > 3 ? '...' : ''}`
+      });
+    } catch (error) {
+      console.error(`Error in date field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_date_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Date format check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate ${field} format: ${String(error)}`
+      });
     }
-    
-    // Convert backend results to frontend ValidationResult format
-    return data.results.map((result: any, index: number) => ({
-      id: `vr_${Date.now()}_ext_${index}`,
-      datasetId: dataset.id,
-      timestamp: data.timestamp,
-      check: result.check,
-      status: result.status,
-      details: result.details
-    }));
-  } catch (error) {
-    console.error("Extended validation error:", error);
-    throw error;
+  }
+  
+  // Check email fields
+  const emailFields = headers.filter(col => col && col.toLowerCase().includes("email"));
+  for (const field of emailFields) {
+    try {
+      let emailFormatValid = true;
+      const invalidEmails: string[] = [];
+      
+      // Simple email validation regex
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      
+      for (const row of content) {
+        const val = row[field];
+        if (val) {
+          try {
+            // Check email format and lowercase
+            if (!emailRegex.test(String(val)) || String(val) !== String(val).toLowerCase()) {
+              emailFormatValid = false;
+              invalidEmails.push(String(val));
+            }
+          } catch {
+            emailFormatValid = false;
+            invalidEmails.push(String(val));
+          }
+        }
+      }
+      
+      const sample = invalidEmails.slice(0, 3);
+      results.push({
+        id: `vr_${Date.now()}_email_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Email format check for ${field}`,
+        status: emailFormatValid ? 'Pass' : 'Fail',
+        details: emailFormatValid 
+          ? `All emails in ${field} are valid and lowercase` 
+          : `Invalid emails found: ${sample.join(', ')}${invalidEmails.length > 3 ? '...' : ''}`
+      });
+    } catch (error) {
+      console.error(`Error in email field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_email_${field}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Email format check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate ${field} format: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
+// Client-side implementation of value_lookup validation
+const runValueLookupValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers, id } = dataset;
+  
+  // Check gender fields for valid values (F or M)
+  const genderFields = headers.filter(col => col && col.toLowerCase().includes("gender"));
+  
+  for (const field of genderFields) {
+    try {
+      const validValues = ["F", "M"];
+      const invalidValues: string[] = [];
+      
+      for (const row of content) {
+        const val = row[field];
+        if (val && !validValues.includes(String(val).toUpperCase())) {
+          invalidValues.push(String(val));
+        }
+      }
+      
+      const allValid = invalidValues.length === 0;
+      const sample = invalidValues.slice(0, 3);
+      
+      results.push({
+        id: `vr_${Date.now()}_gender_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Gender field check for ${field}`,
+        status: allValid ? 'Pass' : 'Fail',
+        details: allValid 
+          ? `All values in ${field} are valid (F or M)` 
+          : `Invalid gender values found: ${sample.join(', ')}${invalidValues.length > 3 ? '...' : ''}`
+      });
+    } catch (error) {
+      console.error(`Error in gender field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_gender_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Gender field check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate ${field}: ${String(error)}`
+      });
+    }
+  }
+  
+  // Check civil status fields (S or M)
+  const statusFields = headers.filter(col => 
+    col && ["civil", "marital", "status"].some(x => col.toLowerCase().includes(x))
+  );
+  
+  for (const field of statusFields) {
+    try {
+      const validValues = ["S", "M"];
+      const invalidValues: string[] = [];
+      
+      for (const row of content) {
+        const val = row[field];
+        if (val && !validValues.includes(String(val).toUpperCase())) {
+          invalidValues.push(String(val));
+        }
+      }
+      
+      const allValid = invalidValues.length === 0;
+      const sample = invalidValues.slice(0, 3);
+      
+      results.push({
+        id: `vr_${Date.now()}_status_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Civil status check for ${field}`,
+        status: allValid ? 'Pass' : 'Fail',
+        details: allValid 
+          ? `All values in ${field} are valid (S or M)` 
+          : `Invalid status values found: ${sample.join(', ')}${invalidValues.length > 3 ? '...' : ''}`
+      });
+    } catch (error) {
+      console.error(`Error in status field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_status_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Civil status check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate ${field}: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
+// Client-side implementation of data_completeness validation
+const runDataCompletenessValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers, id } = dataset;
+  
+  // Row count check
+  const rowCount = content.length;
+  results.push({
+    id: `vr_${Date.now()}_rowcount`,
+    datasetId: id,
+    timestamp,
+    check: "Row count check",
+    status: rowCount > 0 ? 'Pass' : 'Fail',
+    details: `Dataset has ${rowCount} rows`
+  });
+  
+  // Missing field checks for required fields
+  for (const field of headers) {
+    try {
+      const nullCount = content.filter(row => 
+        row[field] === null || row[field] === undefined || row[field] === ''
+      ).length;
+      
+      const nullPercent = (nullCount / rowCount) * 100;
+      
+      results.push({
+        id: `vr_${Date.now()}_missing_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Missing field check for ${field}`,
+        status: nullCount === 0 ? 'Pass' : nullPercent < 5 ? 'Warning' : 'Fail',
+        details: nullCount === 0 
+          ? `No missing values in ${field}` 
+          : `${nullCount} missing values (${nullPercent.toFixed(1)}%) in ${field}`
+      });
+    } catch (error) {
+      console.error(`Error in missing field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_missing_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Missing field check for ${field}`,
+        status: 'Warning',
+        details: `Could not check for missing values in ${field}: ${String(error)}`
+      });
+    }
+  }
+  
+  // Duplicate check for identity fields
+  const idFields = headers.filter(col => 
+    col && ["id", "key", "identity"].some(x => col.toLowerCase().includes(x))
+  );
+  
+  for (const field of idFields) {
+    try {
+      // Count values and find duplicates
+      const valueCounts: Record<string, number> = {};
+      
+      for (const row of content) {
+        const val = String(row[field]);
+        valueCounts[val] = (valueCounts[val] || 0) + 1;
+      }
+      
+      const duplicates = Object.entries(valueCounts)
+        .filter(([_, count]) => count > 1)
+        .map(([value]) => value);
+      
+      const duplicateCount = duplicates.length;
+      
+      results.push({
+        id: `vr_${Date.now()}_dupes_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Duplicate check for ${field}`,
+        status: duplicateCount === 0 ? 'Pass' : 'Fail',
+        details: duplicateCount === 0
+          ? `No duplicates in ${field}`
+          : `Found ${duplicateCount} duplicates in ${field}. Examples: ${duplicates.slice(0, 3).join(', ')}`
+      });
+    } catch (error) {
+      console.error(`Error in duplicate check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_dupes_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Duplicate check for ${field}`,
+        status: 'Warning',
+        details: `Could not check for duplicates in ${field}: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
+// Client-side implementation of data_quality validation
+const runDataQualityValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers, id } = dataset;
+  
+  // Date field quality checks
+  const dateFields = headers.filter(col => 
+    col && ["date", "dob", "birth"].some(x => col.toLowerCase().includes(x))
+  );
+  
+  for (const field of dateFields) {
+    try {
+      let hasYear1800 = false;
+      let futureDates = false;
+      const invalidDates: string[] = [];
+      
+      for (const row of content) {
+        const val = row[field];
+        if (val) {
+          try {
+            const dateVal = new Date(val);
+            if (!isNaN(dateVal.getTime())) {
+              const year = dateVal.getFullYear();
+              if (year < 1900) {
+                hasYear1800 = true;
+                invalidDates.push(`${val} (year < 1900)`);
+              }
+              if (dateVal > new Date()) {
+                futureDates = true;
+                invalidDates.push(`${val} (future date)`);
+              }
+            }
+          } catch {
+            // Skip invalid dates
+          }
+        }
+      }
+      
+      const sample = invalidDates.slice(0, 3);
+      results.push({
+        id: `vr_${Date.now()}_dateq_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Date quality check for ${field}`,
+        status: !hasYear1800 && !futureDates ? 'Pass' : 'Fail',
+        details: !hasYear1800 && !futureDates
+          ? `All dates in ${field} are within acceptable limits`
+          : `Issues with dates: ${sample.join(', ')}${invalidDates.length > 3 ? '...' : ''}`
+      });
+    } catch (error) {
+      console.error(`Error in date quality check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_dateq_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Date quality check for ${field}`,
+        status: 'Warning',
+        details: `Could not validate date quality for ${field}: ${String(error)}`
+      });
+    }
+  }
+  
+  // Numeric field quality checks
+  const potentialNumericFields = headers.filter(col => {
+    // Check if at least 50% of non-empty values are numeric
+    const values = content.map(row => row[col]).filter(val => val !== null && val !== undefined && val !== '');
+    const numericValues = values.filter(val => !isNaN(Number(val)));
+    return numericValues.length > values.length / 2;
+  });
+  
+  for (const field of potentialNumericFields) {
+    try {
+      // Convert to numbers and filter out NaN
+      const numericValues = content
+        .map(row => Number(row[field]))
+        .filter(val => !isNaN(val));
+      
+      if (numericValues.length > 0) {
+        // Calculate quartiles for outlier detection
+        numericValues.sort((a, b) => a - b);
+        const q1Index = Math.floor(numericValues.length * 0.25);
+        const q3Index = Math.floor(numericValues.length * 0.75);
+        const q1 = numericValues[q1Index];
+        const q3 = numericValues[q3Index];
+        const iqr = q3 - q1;
+        
+        const lowerBound = q1 - 1.5 * iqr;
+        const upperBound = q3 + 1.5 * iqr;
+        
+        const outliers = numericValues.filter(val => val < lowerBound || val > upperBound);
+        const outlierCount = outliers.length;
+        const outlierPercent = (outlierCount / numericValues.length) * 100;
+        
+        results.push({
+          id: `vr_${Date.now()}_numeric_${field}`,
+          datasetId: id,
+          timestamp,
+          check: `Numeric quality check for ${field}`,
+          status: outlierCount === 0 ? 'Pass' : outlierPercent < 5 ? 'Warning' : 'Fail',
+          details: outlierCount === 0
+            ? `No outliers in ${field}`
+            : `Found ${outlierCount} outliers (${outlierPercent.toFixed(1)}%) in ${field}`
+        });
+      }
+    } catch (error) {
+      console.error(`Error in numeric field check for ${field}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_numeric_${field}`,
+        datasetId: id,
+        timestamp,
+        check: `Numeric quality check for ${field}`,
+        status: 'Warning',
+        details: `Could not analyze ${field} for numeric quality: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
+// Client-side implementation for all extended validation methods
+const runClientExtendedValidation = (dataset: DatasetType, validationType: string): ValidationResult[] => {
+  switch (validationType) {
+    case "format_checks":
+      return runFormatChecksValidation(dataset);
+    case "value_lookup":
+      return runValueLookupValidation(dataset);
+    case "data_completeness":
+      return runDataCompletenessValidation(dataset);
+    case "data_quality":
+      return runDataQualityValidation(dataset);
+    default:
+      console.warn(`Unknown validation type: ${validationType}`);
+      return [{
+        id: `vr_${Date.now()}_unknown`,
+        datasetId: dataset.id,
+        timestamp: new Date().toISOString(),
+        check: "Validation type",
+        status: "Warning",
+        details: `The validation type '${validationType}' is not implemented or produced no results`
+      }];
   }
 };
 
@@ -566,10 +1009,11 @@ export const runValidation = (
           return;
         }
         
-        // Handle extended validation types using the backend
+        // Handle extended validation types using client-side implementation instead of backend
         if (["format_checks", "value_lookup", "data_completeness", "data_quality"].includes(method)) {
           try {
-            const results = await runExtendedValidation(dataset, method);
+            console.log(`Running client-side ${method} validation`);
+            const results = runClientExtendedValidation(dataset, method);
             
             // Store the validation results
             validationResultsStore[datasetId] = [
