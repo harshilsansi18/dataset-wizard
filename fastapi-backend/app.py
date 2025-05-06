@@ -26,6 +26,7 @@ origins = [
     "http://localhost:8080",            # Alternative Vite port
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8080",
+    "*",                                # Allow all origins temporarily for debugging
 ]
 
 # Adding GitHub Codespaces URLs if running in that environment
@@ -52,7 +53,7 @@ async def health_check():
 
 @app.get("/validate-sql")
 async def validate_sql(query: str):
-    """Validate SQL query syntax"""
+    """Validate SQL query syntax and return detailed information about the operation"""
     try:
         # Enhanced SQL validation with more detailed errors
         logger.info(f"Validating SQL query: {query}")
@@ -80,7 +81,8 @@ async def validate_sql(query: str):
             (r"from\s+from", "Duplicate FROM clause"),
             (r"select\s+select", "Duplicate SELECT clause"),
             (r"where\s+where", "Duplicate WHERE clause"),
-            (r"from\s*$", "FROM clause cannot be at the end without a table name")
+            (r"from\s*$", "FROM clause cannot be at the end without a table name"),
+            (r";.*\S", "Extra characters after semicolon")
         ]
         
         for pattern, message in common_errors:
@@ -88,7 +90,7 @@ async def validate_sql(query: str):
                 return {"valid": False, "message": message}
         
         # Extract selected columns
-        select_match = re.search(r"select\s+(.*?)\s+from", query.lower())
+        select_match = re.search(r"select\s+(.*?)\s+from", query.lower(), re.DOTALL)
         selected_columns = []
         if select_match:
             cols = select_match.group(1).split(',')
@@ -99,9 +101,12 @@ async def validate_sql(query: str):
         # Extract table name
         from_match = re.search(r"from\s+(\w+)", query.lower())
         table_name = from_match.group(1) if from_match else "unknown"
+        
+        # Check if query has a semicolon at the end and remove anything after it for further processing
+        clean_query = query.split(';')[0].strip()
                 
         # Check for IS NULL syntax
-        null_check = re.search(r"(\w+)\s+is\s+null", query.lower())
+        null_check = re.search(r"(\w+)\s+is\s+null", clean_query.lower())
         if null_check:
             column = null_check.group(1)
             return {
@@ -110,11 +115,13 @@ async def validate_sql(query: str):
                 "operation": "null_check",
                 "column": column,
                 "selected_columns": selected_columns,
-                "table": table_name
+                "table": table_name,
+                "query_type": "filter",
+                "rows_affected": "rows where column value is NULL"
             }
             
         # Check for IS NOT NULL syntax
-        not_null_check = re.search(r"(\w+)\s+is\s+not\s+null", query.lower())
+        not_null_check = re.search(r"(\w+)\s+is\s+not\s+null", clean_query.lower())
         if not_null_check:
             column = not_null_check.group(1)
             return {
@@ -123,11 +130,13 @@ async def validate_sql(query: str):
                 "operation": "not_null_check",
                 "column": column,
                 "selected_columns": selected_columns,
-                "table": table_name
+                "table": table_name,
+                "query_type": "filter",
+                "rows_affected": "rows where column value is not NULL"
             }
         
         # Check for IN clause
-        in_clause = re.search(r"(\w+)\s+in\s+\(\s*(.*?)\s*\)", query.lower())
+        in_clause = re.search(r"(\w+)\s+in\s+\(\s*(.*?)\s*\)", clean_query.lower())
         if in_clause:
             column = in_clause.group(1)
             values = in_clause.group(2)
@@ -141,11 +150,13 @@ async def validate_sql(query: str):
                 "column": column,
                 "values": parsed_values,
                 "selected_columns": selected_columns,
-                "table": table_name
+                "table": table_name,
+                "query_type": "filter",
+                "rows_affected": f"rows where {column} matches any of these values: {', '.join(parsed_values)}"
             }
             
         # Check for column comparison
-        comparison_match = re.search(r"(\w+)\s*(=|!=|>|<|>=|<=)\s*(['\w]+)", query.lower())
+        comparison_match = re.search(r"(\w+)\s*(=|!=|>|<|>=|<=)\s*(['\w]+)", clean_query.lower())
         if comparison_match:
             column = comparison_match.group(1)
             operator = comparison_match.group(2)
@@ -159,14 +170,18 @@ async def validate_sql(query: str):
                 "operator": operator,
                 "value": value,
                 "selected_columns": selected_columns,
-                "table": table_name
+                "table": table_name,
+                "query_type": "filter",
+                "rows_affected": f"rows where {column} {operator} {value}"
             }
             
         return {
             "valid": True, 
             "message": f"Query would select {', '.join(selected_columns)} from {table_name}",
             "selected_columns": selected_columns,
-            "table": table_name
+            "table": table_name,
+            "query_type": "select",
+            "rows_affected": "all rows in table"
         }
     except Exception as e:
         logger.error(f"SQL validation error: {str(e)}")

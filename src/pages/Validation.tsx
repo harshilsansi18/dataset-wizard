@@ -21,23 +21,25 @@ import {
   Database,
   Loader2,
   FileText,
-  Calendar
+  Calendar,
+  Table as TableIcon
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets } from "@/services/api";
+import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets, API_URL } from "@/services/api";
 
 const Validation = () => {
   const navigate = useNavigate();
   const [isRunning, setIsRunning] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [validationMethod, setValidationMethod] = useState("basic");
-  const [customSQL, setCustomSQL] = useState("SELECT COUNT(*) FROM table WHERE column IS NULL");
+  const [customSQL, setCustomSQL] = useState("SELECT * FROM table WHERE column IS NULL");
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
+  const [sqlPreview, setSqlPreview] = useState<{valid: boolean, message: string, rows_affected?: string} | null>(null);
 
   useEffect(() => {
     fetchDatasets();
@@ -89,6 +91,48 @@ const Validation = () => {
       setLoading(false);
     }
   };
+
+  const validateSqlQuery = async () => {
+    if (!customSQL) return;
+    
+    try {
+      // Use the selected dataset's name for a more accurate preview
+      const selectedDs = datasets.find(d => d.id === selectedDataset);
+      const tableName = selectedDs?.name.replace('.csv', '') || 'table';
+      
+      // Replace generic table references with the actual dataset name
+      const formattedQuery = customSQL.replace(/\bfrom\s+table\b/i, `FROM ${tableName}`);
+      
+      const response = await fetch(`${API_URL}/validate-sql?query=${encodeURIComponent(formattedQuery)}`);
+      if (response.ok) {
+        const result = await response.json();
+        setSqlPreview(result);
+      } else {
+        setSqlPreview({
+          valid: false,
+          message: "Error connecting to validation service"
+        });
+      }
+    } catch (error) {
+      console.error("Error validating SQL:", error);
+      setSqlPreview({
+        valid: false,
+        message: "Failed to validate SQL query. Backend service might be unavailable."
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (validationMethod === 'custom' && customSQL) {
+      const debounce = setTimeout(() => {
+        validateSqlQuery();
+      }, 800);
+      
+      return () => clearTimeout(debounce);
+    } else {
+      setSqlPreview(null);
+    }
+  }, [customSQL, validationMethod, selectedDataset]);
 
   const simulateValidationProgress = () => {
     setProgress(0);
@@ -247,6 +291,12 @@ datasets:
     }
   }, [selectedDataset, datasets]);
 
+  const getSelectedDatasetName = () => {
+    if (!selectedDataset) return null;
+    const dataset = datasets.find(d => d.id === selectedDataset);
+    return dataset?.name;
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -320,16 +370,42 @@ datasets:
                 </div>
 
                 {validationMethod === "custom" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="custom-sql">Custom SQL Check</Label>
-                    <Textarea
-                      id="custom-sql"
-                      placeholder="SELECT COUNT(*) FROM table WHERE condition..."
-                      value={customSQL}
-                      onChange={(e) => setCustomSQL(e.target.value)}
-                      className="min-h-[120px]"
-                    />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="custom-sql">Custom SQL Check</Label>
+                      <Textarea
+                        id="custom-sql"
+                        placeholder="SELECT COUNT(*) FROM table WHERE column IS NULL"
+                        value={customSQL}
+                        onChange={(e) => setCustomSQL(e.target.value)}
+                        className="min-h-[120px] font-mono text-sm"
+                      />
+                    </div>
+                    
+                    {sqlPreview && (
+                      <div className={`mt-2 rounded-md border p-3 text-sm ${sqlPreview.valid ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-900/20' : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-900/20'}`}>
+                        <div className="flex items-start">
+                          {sqlPreview.valid ? 
+                            <CheckCircle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-green-500" /> : 
+                            <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                          }
+                          <div>
+                            <p className="font-medium">{sqlPreview.valid ? 'SQL is valid' : 'SQL warning'}</p>
+                            <p>{sqlPreview.message}</p>
+                            {sqlPreview.rows_affected && (
+                              <p className="mt-1">
+                                <span className="flex items-center font-medium">
+                                  <TableIcon className="mr-1 h-3 w-3" />
+                                  Result will include:
+                                </span>
+                                {sqlPreview.rows_affected}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <Button 
