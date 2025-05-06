@@ -9,6 +9,7 @@ import re
 import pandas as pd
 from datetime import datetime
 import email_validator
+import traceback
 
 # Configure logging
 logging.basicConfig(
@@ -205,105 +206,155 @@ async def extended_validation(data: dict):
         df = pd.DataFrame(dataset_content)
         results = []
         
+        # Add logging to help debug validation issues
+        logger.info(f"Starting {validation_type} validation on dataset with {len(dataset_content)} rows and {len(headers)} columns")
+        
         # Perform validations based on type
         if validation_type == "format_checks":
+            logger.info("Running format checks validation")
             # Check name fields for proper format (uppercase)
-            name_fields = [col for col in headers if any(x in col.lower() for x in ["name", "first", "last", "suffix"])]
+            name_fields = [col for col in headers if col and any(x in col.lower() for x in ["name", "first", "last", "suffix"])]
             for field in name_fields:
                 if field in df.columns:
-                    uppercase_check = all(str(x).isupper() for x in df[field] if x and pd.notna(x))
-                    results.append({
-                        "check": f"Format check for {field}",
-                        "status": "Pass" if uppercase_check else "Fail",
-                        "details": f"All values in {field} are uppercase" if uppercase_check else f"Some values in {field} are not uppercase"
-                    })
+                    try:
+                        # Handle possible type conversion issues
+                        valid_values = [str(x).upper() if pd.notna(x) else "" for x in df[field]]
+                        invalid_values = [str(v) for i, v in enumerate(df[field]) if pd.notna(v) and str(df[field].iloc[i]).upper() != str(v)]
+                        uppercase_check = len(invalid_values) == 0
+                        
+                        results.append({
+                            "check": f"Format check for {field}",
+                            "status": "Pass" if uppercase_check else "Fail",
+                            "details": f"All values in {field} are uppercase" if uppercase_check else f"Some values in {field} are not uppercase"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in name field check: {str(e)}")
+                        results.append({
+                            "check": f"Format check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate {field} format: {str(e)}"
+                        })
             
             # Check date fields format (YYYY/MM/DD)
-            date_fields = [col for col in headers if any(x in col.lower() for x in ["date", "dob", "birth"])]
+            date_fields = [col for col in headers if col and any(x in col.lower() for x in ["date", "dob", "birth"])]
             for field in date_fields:
                 if field in df.columns:
-                    date_format_valid = True
-                    invalid_dates = []
-                    
-                    for val in df[field]:
-                        if val and pd.notna(val):
-                            try:
-                                # Check if date format is YYYY/MM/DD or similar
-                                if not re.match(r"^\d{4}[/\-]\d{1,2}[/\-]\d{1,2}$", str(val)):
+                    try:
+                        date_format_valid = True
+                        invalid_dates = []
+                        
+                        for val in df[field]:
+                            if val and pd.notna(val):
+                                try:
+                                    # Check if date format is YYYY/MM/DD or similar
+                                    if not re.match(r"^\d{4}[/\-]\d{1,2}[/\-]\d{1,2}$", str(val)):
+                                        date_format_valid = False
+                                        invalid_dates.append(str(val))
+                                except:
                                     date_format_valid = False
                                     invalid_dates.append(str(val))
-                            except:
-                                date_format_valid = False
-                                invalid_dates.append(str(val))
-                    
-                    sample = invalid_dates[:3]
-                    results.append({
-                        "check": f"Date format check for {field}",
-                        "status": "Pass" if date_format_valid else "Fail",
-                        "details": f"All dates in {field} follow YYYY/MM/DD format" if date_format_valid 
-                                else f"Invalid date formats found: {', '.join(sample)}{'...' if len(invalid_dates) > 3 else ''}"
-                    })
+                        
+                        sample = invalid_dates[:3]
+                        results.append({
+                            "check": f"Date format check for {field}",
+                            "status": "Pass" if date_format_valid else "Fail",
+                            "details": f"All dates in {field} follow YYYY/MM/DD format" if date_format_valid 
+                                    else f"Invalid date formats found: {', '.join(sample)}{'...' if len(invalid_dates) > 3 else ''}"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in date field check: {str(e)}")
+                        results.append({
+                            "check": f"Date format check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate {field} format: {str(e)}"
+                        })
                     
             # Check email fields (lowercase and valid format)
-            email_fields = [col for col in headers if "email" in col.lower()]
+            email_fields = [col for col in headers if col and "email" in col.lower()]
             for field in email_fields:
                 if field in df.columns:
-                    email_format_valid = True
-                    invalid_emails = []
-                    
-                    for val in df[field]:
-                        if val and pd.notna(val):
-                            try:
-                                email_validator.validate_email(val)
-                                if val != val.lower():
+                    try:
+                        email_format_valid = True
+                        invalid_emails = []
+                        
+                        for val in df[field]:
+                            if val and pd.notna(val):
+                                try:
+                                    email_validator.validate_email(str(val))
+                                    if str(val) != str(val).lower():
+                                        email_format_valid = False
+                                        invalid_emails.append(f"{val} (not lowercase)")
+                                except:
                                     email_format_valid = False
-                                    invalid_emails.append(f"{val} (not lowercase)")
-                            except:
-                                email_format_valid = False
-                                invalid_emails.append(f"{val} (invalid format)")
-                    
-                    sample = invalid_emails[:3]
-                    results.append({
-                        "check": f"Email format check for {field}",
-                        "status": "Pass" if email_format_valid else "Fail",
-                        "details": f"All emails in {field} are valid and lowercase" if email_format_valid 
-                                else f"Invalid emails found: {', '.join(sample)}{'...' if len(invalid_emails) > 3 else ''}"
-                    })
+                                    invalid_emails.append(f"{val} (invalid format)")
+                        
+                        sample = invalid_emails[:3]
+                        results.append({
+                            "check": f"Email format check for {field}",
+                            "status": "Pass" if email_format_valid else "Fail",
+                            "details": f"All emails in {field} are valid and lowercase" if email_format_valid 
+                                    else f"Invalid emails found: {', '.join(sample)}{'...' if len(invalid_emails) > 3 else ''}"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in email field check: {str(e)}")
+                        results.append({
+                            "check": f"Email format check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate {field} format: {str(e)}"
+                        })
                     
         elif validation_type == "value_lookup":
+            logger.info("Running value lookup validation")
             # Check gender fields for valid values (F or M)
-            gender_fields = [col for col in headers if "gender" in col.lower()]
+            gender_fields = [col for col in headers if col and "gender" in col.lower()]
             for field in gender_fields:
                 if field in df.columns:
-                    valid_values = ["F", "M"]
-                    all_valid = all(str(x).upper() in valid_values for x in df[field] if x and pd.notna(x))
-                    invalid_values = [str(x) for x in df[field] if x and pd.notna(x) and str(x).upper() not in valid_values]
-                    sample = invalid_values[:3]
-                    
-                    results.append({
-                        "check": f"Gender field check for {field}",
-                        "status": "Pass" if all_valid else "Fail",
-                        "details": f"All values in {field} are valid (F or M)" if all_valid 
-                                else f"Invalid gender values found: {', '.join(sample)}{'...' if len(invalid_values) > 3 else ''}"
-                    })
+                    try:
+                        valid_values = ["F", "M"]
+                        all_valid = all(str(x).upper() in valid_values for x in df[field] if x and pd.notna(x))
+                        invalid_values = [str(x) for x in df[field] if x and pd.notna(x) and str(x).upper() not in valid_values]
+                        sample = invalid_values[:3]
+                        
+                        results.append({
+                            "check": f"Gender field check for {field}",
+                            "status": "Pass" if all_valid else "Fail",
+                            "details": f"All values in {field} are valid (F or M)" if all_valid 
+                                    else f"Invalid gender values found: {', '.join(sample)}{'...' if len(invalid_values) > 3 else ''}"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in gender field check: {str(e)}")
+                        results.append({
+                            "check": f"Gender field check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate {field}: {str(e)}"
+                        })
                     
             # Check civil status fields (S or M)
-            status_fields = [col for col in headers if any(x in col.lower() for x in ["civil", "marital", "status"])]
+            status_fields = [col for col in headers if col and any(x in col.lower() for x in ["civil", "marital", "status"])]
             for field in status_fields:
                 if field in df.columns:
-                    valid_values = ["S", "M"]
-                    all_valid = all(str(x).upper() in valid_values for x in df[field] if x and pd.notna(x))
-                    invalid_values = [str(x) for x in df[field] if x and pd.notna(x) and str(x).upper() not in valid_values]
-                    sample = invalid_values[:3]
-                    
-                    results.append({
-                        "check": f"Civil status check for {field}",
-                        "status": "Pass" if all_valid else "Fail",
-                        "details": f"All values in {field} are valid (S or M)" if all_valid 
-                                else f"Invalid status values found: {', '.join(sample)}{'...' if len(invalid_values) > 3 else ''}"
-                    })
+                    try:
+                        valid_values = ["S", "M"]
+                        all_valid = all(str(x).upper() in valid_values for x in df[field] if x and pd.notna(x))
+                        invalid_values = [str(x) for x in df[field] if x and pd.notna(x) and str(x).upper() not in valid_values]
+                        sample = invalid_values[:3]
+                        
+                        results.append({
+                            "check": f"Civil status check for {field}",
+                            "status": "Pass" if all_valid else "Fail",
+                            "details": f"All values in {field} are valid (S or M)" if all_valid 
+                                    else f"Invalid status values found: {', '.join(sample)}{'...' if len(invalid_values) > 3 else ''}"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in status field check: {str(e)}")
+                        results.append({
+                            "check": f"Civil status check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate {field}: {str(e)}"
+                        })
                     
         elif validation_type == "data_completeness":
+            logger.info("Running data completeness validation")
             # Row count check
             row_count = len(df)
             results.append({
@@ -313,98 +364,140 @@ async def extended_validation(data: dict):
             })
             
             # Missing field checks for required fields
-            # Assuming all fields are required unless specified otherwise
             for field in headers:
-                null_count = df[field].isna().sum() if field in df.columns else row_count
-                null_percent = (null_count / row_count) * 100 if row_count > 0 else 0
-                
-                results.append({
-                    "check": f"Missing field check for {field}",
-                    "status": "Pass" if null_count == 0 else "Warning" if null_percent < 5 else "Fail",
-                    "details": f"No missing values in {field}" if null_count == 0 
-                            else f"{null_count} missing values ({null_percent:.1f}%) in {field}"
-                })
+                try:
+                    if field in df.columns:
+                        null_count = df[field].isna().sum()
+                        null_percent = (null_count / row_count) * 100 if row_count > 0 else 0
+                        
+                        results.append({
+                            "check": f"Missing field check for {field}",
+                            "status": "Pass" if null_count == 0 else "Warning" if null_percent < 5 else "Fail",
+                            "details": f"No missing values in {field}" if null_count == 0 
+                                    else f"{null_count} missing values ({null_percent:.1f}%) in {field}"
+                        })
+                except Exception as e:
+                    logger.error(f"Error in missing field check: {str(e)}")
+                    results.append({
+                        "check": f"Missing field check for {field}",
+                        "status": "Warning",
+                        "details": f"Could not check for missing values in {field}: {str(e)}"
+                    })
                 
             # Duplicate check for identity fields
-            id_fields = [col for col in headers if any(x in col.lower() for x in ["id", "key", "identity"])]
+            id_fields = [col for col in headers if col and any(x in col.lower() for x in ["id", "key", "identity"])]
             if id_fields:
                 for field in id_fields:
                     if field in df.columns:
-                        duplicate_count = len(df) - df[field].nunique()
-                        duplicates = []
-                        
-                        if duplicate_count > 0:
-                            value_counts = df[field].value_counts()
-                            dupes = value_counts[value_counts > 1]
-                            duplicates = dupes.index.tolist()[:3]  # Get top 3 duplicated values
+                        try:
+                            duplicate_count = len(df) - df[field].nunique()
+                            duplicates = []
                             
-                        results.append({
-                            "check": f"Duplicate check for {field}",
-                            "status": "Pass" if duplicate_count == 0 else "Fail",
-                            "details": f"No duplicates in {field}" if duplicate_count == 0
-                                    else f"Found {duplicate_count} duplicates in {field}. Examples: {duplicates}"
-                        })
+                            if duplicate_count > 0:
+                                value_counts = df[field].value_counts()
+                                dupes = value_counts[value_counts > 1]
+                                duplicates = dupes.index.tolist()[:3]  # Get top 3 duplicated values
+                                
+                            results.append({
+                                "check": f"Duplicate check for {field}",
+                                "status": "Pass" if duplicate_count == 0 else "Fail",
+                                "details": f"No duplicates in {field}" if duplicate_count == 0
+                                        else f"Found {duplicate_count} duplicates in {field}. Examples: {duplicates}"
+                            })
+                        except Exception as e:
+                            logger.error(f"Error in duplicate check: {str(e)}")
+                            results.append({
+                                "check": f"Duplicate check for {field}",
+                                "status": "Warning",
+                                "details": f"Could not check for duplicates in {field}: {str(e)}"
+                            })
                         
         elif validation_type == "data_quality":
+            logger.info("Running data quality validation")
             # Date field quality checks
-            date_fields = [col for col in headers if any(x in col.lower() for x in ["date", "dob", "birth"])]
+            date_fields = [col for col in headers if col and any(x in col.lower() for x in ["date", "dob", "birth"])]
             for field in date_fields:
                 if field in df.columns:
-                    has_year_1800 = False
-                    future_dates = False
-                    invalid_dates = []
-                    
-                    for val in df[field]:
-                        if val and pd.notna(val):
-                            try:
-                                date_val = pd.to_datetime(val)
-                                year = date_val.year
-                                if year < 1900:
-                                    has_year_1800 = True
-                                    invalid_dates.append(f"{val} (year < 1900)")
-                                if date_val > datetime.now():
-                                    future_dates = True
-                                    invalid_dates.append(f"{val} (future date)")
-                            except:
-                                pass
-                    
-                    sample = invalid_dates[:3]
-                    results.append({
-                        "check": f"Date quality check for {field}",
-                        "status": "Pass" if not has_year_1800 and not future_dates else "Fail",
-                        "details": f"All dates in {field} are within acceptable limits" if not has_year_1800 and not future_dates
-                                else f"Issues with dates: {', '.join(sample)}{'...' if len(invalid_dates) > 3 else ''}"
-                    })
+                    try:
+                        has_year_1800 = False
+                        future_dates = False
+                        invalid_dates = []
+                        
+                        for val in df[field]:
+                            if val and pd.notna(val):
+                                try:
+                                    date_val = pd.to_datetime(val)
+                                    year = date_val.year
+                                    if year < 1900:
+                                        has_year_1800 = True
+                                        invalid_dates.append(f"{val} (year < 1900)")
+                                    if date_val > datetime.now():
+                                        future_dates = True
+                                        invalid_dates.append(f"{val} (future date)")
+                                except:
+                                    pass
+                        
+                        sample = invalid_dates[:3]
+                        results.append({
+                            "check": f"Date quality check for {field}",
+                            "status": "Pass" if not has_year_1800 and not future_dates else "Fail",
+                            "details": f"All dates in {field} are within acceptable limits" if not has_year_1800 and not future_dates
+                                    else f"Issues with dates: {', '.join(sample)}{'...' if len(invalid_dates) > 3 else ''}"
+                        })
+                    except Exception as e:
+                        logger.error(f"Error in date quality check: {str(e)}")
+                        results.append({
+                            "check": f"Date quality check for {field}",
+                            "status": "Warning",
+                            "details": f"Could not validate date quality for {field}: {str(e)}"
+                        })
             
             # Numeric field quality checks
-            numeric_fields = [col for col in headers if df[col].dtype.kind in 'ifc']  # integer, float, complex
-            for field in numeric_fields:
-                if field in df.columns:
-                    try:
-                        # Check for outliers using IQR
-                        q1 = df[field].quantile(0.25)
-                        q3 = df[field].quantile(0.75)
-                        iqr = q3 - q1
-                        lower_bound = q1 - 1.5 * iqr
-                        upper_bound = q3 + 1.5 * iqr
-                        
-                        outliers = df[(df[field] < lower_bound) | (df[field] > upper_bound)][field]
-                        outlier_count = len(outliers)
-                        outlier_percent = (outlier_count / len(df)) * 100
-                        
-                        results.append({
-                            "check": f"Numeric quality check for {field}",
-                            "status": "Pass" if outlier_count == 0 else "Warning" if outlier_percent < 5 else "Fail",
-                            "details": f"No outliers in {field}" if outlier_count == 0
-                                    else f"Found {outlier_count} outliers ({outlier_percent:.1f}%) in {field}"
-                        })
-                    except:
-                        results.append({
-                            "check": f"Numeric quality check for {field}",
-                            "status": "Warning",
-                            "details": f"Could not analyze {field} for numeric quality"
-                        })
+            try:
+                numeric_fields = [col for col in headers if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
+                for field in numeric_fields:
+                    if field in df.columns:
+                        try:
+                            # Check for outliers using IQR
+                            q1 = df[field].quantile(0.25)
+                            q3 = df[field].quantile(0.75)
+                            iqr = q3 - q1
+                            lower_bound = q1 - 1.5 * iqr
+                            upper_bound = q3 + 1.5 * iqr
+                            
+                            outliers = df[(df[field] < lower_bound) | (df[field] > upper_bound)][field]
+                            outlier_count = len(outliers)
+                            outlier_percent = (outlier_count / len(df)) * 100
+                            
+                            results.append({
+                                "check": f"Numeric quality check for {field}",
+                                "status": "Pass" if outlier_count == 0 else "Warning" if outlier_percent < 5 else "Fail",
+                                "details": f"No outliers in {field}" if outlier_count == 0
+                                        else f"Found {outlier_count} outliers ({outlier_percent:.1f}%) in {field}"
+                            })
+                        except Exception as e:
+                            logger.error(f"Error in numeric field check: {str(e)}")
+                            results.append({
+                                "check": f"Numeric quality check for {field}",
+                                "status": "Warning",
+                                "details": f"Could not analyze {field} for numeric quality: {str(e)}"
+                            })
+            except Exception as e:
+                logger.error(f"Error identifying numeric fields: {str(e)}")
+                results.append({
+                    "check": "Numeric field detection",
+                    "status": "Warning",
+                    "details": "Could not identify numeric fields for validation"
+                })
         
+        # If no specific validation was found, add a default result
+        if not results:
+            results.append({
+                "check": "Validation type",
+                "status": "Warning",
+                "details": f"The validation type '{validation_type}' is not implemented or produced no results"
+            })
+            
         # Return validation results with timestamp
         return {
             "success": True,
@@ -415,11 +508,12 @@ async def extended_validation(data: dict):
                 
     except Exception as e:
         logger.error(f"Extended validation error: {str(e)}")
-        import traceback
+        tb = traceback.format_exc()
+        logger.error(tb)
         return {
             "success": False, 
             "message": f"Validation error: {str(e)}",
-            "traceback": traceback.format_exc()
+            "traceback": tb
         }
 
 if __name__ == "__main__":
