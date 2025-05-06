@@ -22,8 +22,21 @@ import {
   Loader2,
   FileText,
   Calendar,
-  Table as TableIcon
+  Table as TableIcon,
+  Check,
+  ListFilter,
+  User,
+  Mail,
+  Calendar as CalendarIcon
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { toast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets, API_URL } from "@/services/api";
@@ -147,7 +160,7 @@ const Validation = () => {
       { progress: 90, log: "Finalizing results..." },
     ];
     
-    if (validationMethod === "advanced") {
+    if (["advanced", "format_checks", "value_lookup", "data_completeness", "data_quality"].includes(validationMethod)) {
       stageTimeline.splice(3, 0, 
         { progress: 40, log: "Checking for schema consistency..." }
       );
@@ -156,6 +169,30 @@ const Validation = () => {
     if (validationMethod === "custom" && customSQL) {
       stageTimeline.splice(4, 0, 
         { progress: 60, log: `Processing custom SQL: ${customSQL.substring(0, 30)}...` }
+      );
+    }
+    
+    if (validationMethod === "format_checks") {
+      stageTimeline.splice(3, 0,
+        { progress: 45, log: "Validating name, date, email, and location formats..." }
+      );
+    }
+    
+    if (validationMethod === "value_lookup") {
+      stageTimeline.splice(3, 0,
+        { progress: 45, log: "Checking value lists for gender and status fields..." }
+      );
+    }
+    
+    if (validationMethod === "data_completeness") {
+      stageTimeline.splice(3, 0,
+        { progress: 45, log: "Verifying row counts and checking for missing required fields..." }
+      );
+    }
+    
+    if (validationMethod === "data_quality") {
+      stageTimeline.splice(3, 0,
+        { progress: 45, log: "Analyzing date fields and numeric outliers..." }
       );
     }
     
@@ -274,7 +311,20 @@ datasets:
           metrics:
             - row_count
           tests:
-            - row_count > 0` : ''}
+            - row_count > 0` : ''}${validationMethod === 'format_checks' ? `
+      - values in [name, first_name, last_name] match regex "[A-Z].*"
+      - values in [email] match regex "^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
+      - values in [birth_date] match regex "^\\d{4}[/\\-]\\d{1,2}[/\\-]\\d{1,2}$"` : ''}${validationMethod === 'value_lookup' ? `
+      - values in [gender] in ("F", "M")
+      - values in [civil_status] in ("S", "M")` : ''}${validationMethod === 'data_completeness' ? `
+      - row_count > 0
+      - missing_count(id) = 0
+      - missing_percent(name) < 1
+      - duplicate_count(id) = 0` : ''}${validationMethod === 'data_quality' ? `
+      - min(birth_date) > date("1900-01-01")
+      - max(birth_date) < today()
+      - avg(age) between 18 and 100
+      - stddev(salary) < 50000` : ''}
 `;
 
   const validationDate = validationResults.length > 0 
@@ -295,6 +345,24 @@ datasets:
     if (!selectedDataset) return null;
     const dataset = datasets.find(d => d.id === selectedDataset);
     return dataset?.name;
+  };
+
+  // Get validation method icon
+  const getValidationMethodIcon = () => {
+    switch (validationMethod) {
+      case "format_checks":
+        return <Check className="mr-2 h-5 w-5" />;
+      case "value_lookup":
+        return <ListFilter className="mr-2 h-5 w-5" />;
+      case "data_completeness":
+        return <TableIcon className="mr-2 h-5 w-5" />;
+      case "data_quality":
+        return <CheckCircle className="mr-2 h-5 w-5" />;
+      case "custom":
+        return <Terminal className="mr-2 h-5 w-5" />;
+      default:
+        return <Shield className="mr-2 h-5 w-5" />;
+    }
   };
 
   return (
@@ -341,33 +409,108 @@ datasets:
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Validation Method</Label>
-                  <RadioGroup 
-                    value={validationMethod} 
-                    onValueChange={setValidationMethod}
-                    className="flex flex-col space-y-1"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="basic" id="basic" />
-                      <Label htmlFor="basic" className="cursor-pointer">
-                        Basic Checks (Missing values, Types)
-                      </Label>
+                <Tabs defaultValue="basic" onValueChange={(value) => setValidationMethod(value)}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="basic">Basic Options</TabsTrigger>
+                    <TabsTrigger value="extended">Extended Options</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="basic" className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>Validation Method</Label>
+                      <RadioGroup 
+                        value={validationMethod} 
+                        onValueChange={setValidationMethod}
+                        className="flex flex-col space-y-1"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="basic" id="basic" />
+                          <Label htmlFor="basic" className="cursor-pointer">
+                            Basic Checks (Missing values, Types)
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="advanced" id="advanced" />
+                          <Label htmlFor="advanced" className="cursor-pointer">
+                            Advanced Checks (Schema, Constraints)
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="custom" id="custom" />
+                          <Label htmlFor="custom" className="cursor-pointer">
+                            Custom SQL Checks
+                          </Label>
+                        </div>
+                      </RadioGroup>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="advanced" id="advanced" />
-                      <Label htmlFor="advanced" className="cursor-pointer">
-                        Advanced Checks (Schema, Constraints)
-                      </Label>
+                  </TabsContent>
+                  
+                  <TabsContent value="extended" className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>FBDI File Validation</Label>
+                      <RadioGroup 
+                        value={validationMethod} 
+                        onValueChange={setValidationMethod}
+                        className="flex flex-col space-y-1"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="format_checks" id="format_checks" />
+                          <Label htmlFor="format_checks" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <Check className="mr-2 h-4 w-4 text-blue-600" />
+                              Format Checks
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Name, Email, Date, Phone)</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="value_lookup" id="value_lookup" />
+                          <Label htmlFor="value_lookup" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <ListFilter className="mr-2 h-4 w-4 text-blue-600" />
+                              Value Lookup Checks
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Gender, Civil Status)</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="data_completeness" id="data_completeness" />
+                          <Label htmlFor="data_completeness" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <TableIcon className="mr-2 h-4 w-4 text-blue-600" />
+                              Data Completeness
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Row Count, Missing Values)</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="data_quality" id="data_quality" />
+                          <Label htmlFor="data_quality" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <AlertTriangle className="mr-2 h-4 w-4 text-blue-600" />
+                              Data Quality
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Dates, Numeric Fields)</span>
+                          </Label>
+                        </div>
+                      </RadioGroup>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="custom" id="custom" />
-                      <Label htmlFor="custom" className="cursor-pointer">
-                        Custom SQL Checks
-                      </Label>
+                    
+                    <div className="rounded-md border p-3 bg-slate-50 dark:bg-slate-900 text-sm">
+                      <div className="flex items-center mb-2 text-blue-600">
+                        <img 
+                          src="public/lovable-uploads/2d23d3c7-e2d1-49bb-9c8c-40c03fccf8e8.png" 
+                          alt="FBDI Validation Checklist" 
+                          className="h-5 w-5 mr-2 rounded-sm" 
+                        />
+                        <span className="font-medium">FBDI File Validation Options</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Run different validation checks based on FBDI file validation requirements.
+                      </p>
                     </div>
-                  </RadioGroup>
-                </div>
+                  </TabsContent>
+                </Tabs>
 
                 {validationMethod === "custom" && (
                   <>
@@ -406,6 +549,32 @@ datasets:
                       </div>
                     )}
                   </>
+                )}
+
+                {validationMethod === "format_checks" && (
+                  <div className="rounded-md border p-3 bg-slate-50 dark:bg-slate-900 text-sm">
+                    <div className="flex items-start mb-2">
+                      <User className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Name fields</p>
+                        <p className="text-xs text-muted-foreground">Checks for proper case in first, last, and suffix fields</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start mb-2">
+                      <Mail className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Email fields</p>
+                        <p className="text-xs text-muted-foreground">Validates email format and case sensitivity</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start">
+                      <CalendarIcon className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Date/time fields</p>
+                        <p className="text-xs text-muted-foreground">Checks for YYYY/MM/DD and HH:MM:SS formats</p>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 <Button 
@@ -468,7 +637,7 @@ datasets:
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span className="flex items-center">
-                  <Database className="mr-2 h-5 w-5 text-blue-600" />
+                  {getValidationMethodIcon()}
                   Validation Results
                 </span>
                 <div className="flex items-center">
@@ -543,33 +712,30 @@ datasets:
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {validationResults.map((result, index) => (
-                    <motion.div
-                      key={result.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.1 }}
-                      className={`rounded-lg border p-4 ${getResultClass(result.status)}`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start">
-                          <div className="mr-3 mt-0.5">
-                            {getResultIcon(result.status)}
-                          </div>
-                          <div>
-                            <h3 className="font-medium">{result.check}</h3>
-                            <p className="text-sm text-slate-600 dark:text-slate-300">
-                              {result.details}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          <Clock className="mr-1 inline-block h-3 w-3" />
-                          {new Date(result.timestamp).toLocaleTimeString()}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[50px]">Status</TableHead>
+                        <TableHead className="w-[250px]">Check</TableHead>
+                        <TableHead>Details</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {validationResults.map((result) => (
+                        <TableRow key={result.id}>
+                          <TableCell>
+                            <div className="flex justify-center">
+                              {getResultIcon(result.status)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {result.check}
+                          </TableCell>
+                          <TableCell>{result.details}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </CardContent>

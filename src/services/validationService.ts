@@ -33,6 +33,49 @@ const saveToStorage = (data: any) => {
   }
 };
 
+// API URL for backend services
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// Run extended validation using the backend
+const runExtendedValidation = async (dataset: DatasetType, validationType: string): Promise<ValidationResult[]> => {
+  try {
+    const response = await fetch(`${API_URL}/extended-validation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        validationType,
+        content: dataset.content,
+        headers: dataset.headers
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'Unknown error in extended validation');
+    }
+    
+    // Convert backend results to frontend ValidationResult format
+    return data.results.map((result: any, index: number) => ({
+      id: `vr_${Date.now()}_ext_${index}`,
+      datasetId: dataset.id,
+      timestamp: data.timestamp,
+      check: result.check,
+      status: result.status,
+      details: result.details
+    }));
+  } catch (error) {
+    console.error("Extended validation error:", error);
+    throw error;
+  }
+};
+
 // Actual data validation functions
 const validateRowCount = (data: any[]): ValidationResult['status'] => {
   return data.length > 0 ? 'Pass' : 'Fail';
@@ -217,7 +260,6 @@ const validateCustomSQL = async (data: any[], sqlQuery: string, headers: string[
   // Use the backend API for SQL validation if available
   try {
     // First try to validate the query via backend API
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
     const response = await fetch(`${API_URL}/validate-sql?query=${encodeURIComponent(sqlQuery)}`);
     const validation = await response.json();
     
@@ -524,74 +566,138 @@ export const runValidation = (
           return;
         }
         
-        // Generate real validation results based on file content
+        // Handle extended validation types using the backend
+        if (["format_checks", "value_lookup", "data_completeness", "data_quality"].includes(method)) {
+          try {
+            const results = await runExtendedValidation(dataset, method);
+            
+            // Store the validation results
+            validationResultsStore[datasetId] = [
+              ...(validationResultsStore[datasetId] || []),
+              ...results
+            ];
+            saveToStorage(validationResultsStore);
+            
+            // Update dataset status based on validation results
+            const hasFailures = results.some(r => r.status === 'Fail');
+            const hasWarnings = results.some(r => r.status === 'Warning');
+            
+            let newStatus: "Validated" | "Issues Found" | "Not Validated" = "Validated";
+            if (hasFailures || hasWarnings) {
+              newStatus = "Issues Found";
+            }
+            
+            updateDataset(datasetId, { status: newStatus });
+            
+            resolve(results);
+            return;
+          } catch (error) {
+            console.error("Extended validation error:", error);
+            reject(error);
+            return;
+          }
+        }
+        
+        // Generate real validation results based on file content for basic validation methods
         const results: ValidationResult[] = [];
         const timestamp = new Date().toISOString();
         
-        // Row count validation
-        const rowCountStatus = validateRowCount(dataset.content);
-        results.push({
-          id: `vr_${Date.now()}_1`,
-          datasetId,
-          timestamp,
-          check: 'Row count > 0',
-          status: rowCountStatus,
-          details: rowCountStatus === 'Pass' 
-            ? `Dataset has ${dataset.content.length} rows.` 
-            : 'Dataset has no rows.'
-        });
-        
-        // Missing values validation
-        const missingValuesResult = validateMissingValues(dataset.content, dataset.headers);
-        results.push({
-          id: `vr_${Date.now()}_2`,
-          datasetId,
-          timestamp,
-          check: 'No missing values in key columns',
-          status: missingValuesResult.status,
-          details: missingValuesResult.details
-        });
+        // Basic validation checks
+        if (method === "basic") {
+          // Row count validation
+          const rowCountStatus = dataset.content.length > 0 ? 'Pass' : 'Fail';
+          results.push({
+            id: `vr_${Date.now()}_1`,
+            datasetId,
+            timestamp,
+            check: 'Row count > 0',
+            status: rowCountStatus,
+            details: rowCountStatus === 'Pass' 
+              ? `Dataset has ${dataset.content.length} rows.` 
+              : 'Dataset has no rows.'
+          });
+          
+          // Missing values validation - check a sample of columns
+          const importantColumns = dataset.headers.slice(0, Math.min(5, dataset.headers.length));
+          for (const column of importantColumns) {
+            const nullCount = dataset.content.filter(row => !row[column] && row[column] !== 0 && row[column] !== false).length;
+            const nullPercent = (nullCount / dataset.content.length) * 100;
+            
+            results.push({
+              id: `vr_${Date.now()}_${column}`,
+              datasetId,
+              timestamp,
+              check: `No missing values in ${column}`,
+              status: nullCount === 0 ? 'Pass' : nullPercent < 5 ? 'Warning' : 'Fail',
+              details: nullCount === 0 
+                ? `No missing values in ${column}` 
+                : `${nullCount} missing values (${nullPercent.toFixed(1)}%) in ${column}`
+            });
+          }
+        }
         
         // Add advanced validation checks
         if (method === 'advanced') {
           // Data type consistency validation
-          const dataTypeResult = validateDataTypes(dataset.content, dataset.headers);
-          results.push({
-            id: `vr_${Date.now()}_3`,
-            datasetId,
-            timestamp,
-            check: 'Data type consistency',
-            status: dataTypeResult.status,
-            details: dataTypeResult.details
-          });
+          for (const header of dataset.headers) {
+            // Infer type from first non-null value
+            let inferredType = 'unknown';
+            let typeInconsistencies = 0;
+            
+            for (const row of dataset.content) {
+              const value = row[header];
+              if (value !== null && value !== undefined && value !== '') {
+                // Set initial type if not yet determined
+                if (inferredType === 'unknown') {
+                  if (!isNaN(Number(value))) {
+                    inferredType = 'number';
+                  } else if (!isNaN(Date.parse(String(value)))) {
+                    inferredType = 'date';
+                  } else {
+                    inferredType = 'string';
+                  }
+                } else {
+                  // Check for consistency with inferred type
+                  if (inferredType === 'number' && isNaN(Number(value))) {
+                    typeInconsistencies++;
+                  } else if (inferredType === 'date' && isNaN(Date.parse(String(value)))) {
+                    typeInconsistencies++;
+                  }
+                }
+              }
+            }
+            
+            const inconsistencyPercent = (typeInconsistencies / dataset.content.length) * 100;
+            results.push({
+              id: `vr_${Date.now()}_type_${header}`,
+              datasetId,
+              timestamp,
+              check: `Data type consistency for ${header}`,
+              status: typeInconsistencies === 0 ? 'Pass' : inconsistencyPercent < 5 ? 'Warning' : 'Fail',
+              details: typeInconsistencies === 0
+                ? `Column ${header} has consistent ${inferredType} values`
+                : `Found ${typeInconsistencies} type inconsistencies in ${header} (expected ${inferredType})`
+            });
+          }
           
-          // Simple duplicate check
-          const distinctCount = new Set(dataset.content.map(row => 
-            JSON.stringify(Object.values(row).slice(0, 2))
-          )).size;
-          
-          const hasDuplicates = distinctCount < dataset.content.length;
-          results.push({
-            id: `vr_${Date.now()}_4`,
-            datasetId,
-            timestamp,
-            check: 'Duplicate detection',
-            status: hasDuplicates ? 'Warning' : 'Pass',
-            details: hasDuplicates 
-              ? `Found potential duplicates: ${dataset.content.length - distinctCount} rows may be duplicated.` 
-              : 'No duplicates detected in the first few columns.'
-          });
-          
-          // Add AI-powered validation
-          const aiValidationResult = validateWithAI(dataset.content, dataset.headers);
-          results.push({
-            id: `vr_${Date.now()}_5`,
-            datasetId,
-            timestamp,
-            check: 'AI-powered anomaly detection',
-            status: aiValidationResult.status,
-            details: aiValidationResult.details
-          });
+          // Simple duplicate check for first column (often ID)
+          if (dataset.headers.length > 0) {
+            const firstColumn = dataset.headers[0];
+            const values = dataset.content.map(row => row[firstColumn]);
+            const uniqueValues = new Set(values);
+            const duplicates = values.length - uniqueValues.size;
+            
+            results.push({
+              id: `vr_${Date.now()}_dupes`,
+              datasetId,
+              timestamp,
+              check: `Duplicate check for ${firstColumn}`,
+              status: duplicates === 0 ? 'Pass' : 'Warning',
+              details: duplicates === 0
+                ? `No duplicates found in ${firstColumn}`
+                : `Found ${duplicates} duplicate values in ${firstColumn}`
+            });
+          }
         }
         
         // Add custom SQL check with improved handling
