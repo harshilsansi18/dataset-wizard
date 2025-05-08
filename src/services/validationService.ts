@@ -1,4 +1,3 @@
-
 import { ValidationResult, DatasetType } from "./types";
 import { updateDataset } from "./datasetService";
 import { toast } from "@/hooks/use-toast";
@@ -495,6 +494,457 @@ const runDataQualityValidation = (dataset: DatasetType): ValidationResult[] => {
   return results;
 };
 
+// NEW: Client-side implementation of statistical_analysis validation
+const runStatisticalAnalysisValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers, id } = dataset;
+  
+  // Find numeric columns for statistical analysis
+  const numericColumns = headers.filter(col => {
+    const values = content.map(row => row[col]);
+    const numericValues = values.filter(val => val !== null && val !== undefined && val !== '' && !isNaN(Number(val)));
+    return numericValues.length > values.length / 2;
+  });
+  
+  // Calculate basic statistics for numeric columns
+  for (const column of numericColumns) {
+    try {
+      // Convert values to numbers and filter out non-numeric values
+      const values = content
+        .map(row => row[column])
+        .filter(val => val !== null && val !== undefined && val !== '')
+        .map(val => Number(val))
+        .filter(val => !isNaN(val));
+      
+      if (values.length === 0) continue;
+      
+      // Calculate basic statistics
+      const sum = values.reduce((a, b) => a + b, 0);
+      const mean = sum / values.length;
+      const sortedValues = [...values].sort((a, b) => a - b);
+      const median = sortedValues[Math.floor(values.length / 2)];
+      
+      // Calculate standard deviation
+      const squareDiffs = values.map(value => {
+        const diff = value - mean;
+        return diff * diff;
+      });
+      const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / squareDiffs.length;
+      const stdDev = Math.sqrt(avgSquareDiff);
+      
+      // Calculate 25th and 75th percentiles (Q1 and Q3)
+      const q1Index = Math.floor(values.length * 0.25);
+      const q3Index = Math.floor(values.length * 0.75);
+      const q1 = sortedValues[q1Index];
+      const q3 = sortedValues[q3Index];
+      
+      // Calculate skewness (measure of asymmetry)
+      const cubeSum = values.reduce((acc, val) => acc + Math.pow(val - mean, 3), 0);
+      const skewness = cubeSum / (values.length * Math.pow(stdDev, 3));
+      
+      // Check for normal distribution (using skewness as a simple test)
+      const isNearNormal = Math.abs(skewness) < 0.5;
+      
+      results.push({
+        id: `vr_${Date.now()}_stats_${column}_normality`,
+        datasetId: id,
+        timestamp,
+        check: `Distribution check for ${column}`,
+        status: isNearNormal ? 'Pass' : 'Warning',
+        details: isNearNormal 
+          ? `${column} appears to be normally distributed (skewness: ${skewness.toFixed(2)})` 
+          : `${column} shows skewed distribution (skewness: ${skewness.toFixed(2)})`
+      });
+      
+      // Detect outliers using IQR method
+      const iqr = q3 - q1;
+      const lowerBound = q1 - 1.5 * iqr;
+      const upperBound = q3 + 1.5 * iqr;
+      
+      const outliers = values.filter(val => val < lowerBound || val > upperBound);
+      const outlierPercent = (outliers.length / values.length) * 100;
+      
+      results.push({
+        id: `vr_${Date.now()}_stats_${column}_outliers`,
+        datasetId: id,
+        timestamp,
+        check: `Outlier check for ${column}`,
+        status: outlierPercent < 1 ? 'Pass' : outlierPercent < 5 ? 'Warning' : 'Fail',
+        details: outlierPercent < 1 
+          ? `No significant outliers detected in ${column}` 
+          : `Found ${outliers.length} outliers (${outlierPercent.toFixed(1)}%) in ${column}`
+      });
+      
+      // Check for uniform data distribution
+      const min = sortedValues[0];
+      const max = sortedValues[sortedValues.length - 1];
+      const range = max - min;
+      
+      // Create histogram bins (10 bins)
+      const binSize = range / 10;
+      const bins = Array(10).fill(0);
+      
+      values.forEach(val => {
+        const binIndex = Math.min(9, Math.floor((val - min) / binSize));
+        bins[binIndex]++;
+      });
+      
+      // Calculate coefficient of variation for bin counts
+      const binMean = values.length / 10;
+      const binVariance = bins.reduce((acc, count) => acc + Math.pow(count - binMean, 2), 0) / 10;
+      const binStdDev = Math.sqrt(binVariance);
+      const binCoeffVar = binStdDev / binMean;
+      
+      // Low coefficient of variation suggests more uniform distribution
+      const isUniform = binCoeffVar < 0.5;
+      
+      results.push({
+        id: `vr_${Date.now()}_stats_${column}_uniformity`,
+        datasetId: id,
+        timestamp,
+        check: `Uniformity check for ${column}`,
+        status: isUniform ? 'Pass' : 'Warning',
+        details: isUniform
+          ? `${column} shows relatively uniform distribution`
+          : `${column} shows clustered or uneven distribution`
+      });
+      
+      // Add summary statistics
+      results.push({
+        id: `vr_${Date.now()}_stats_${column}_summary`,
+        datasetId: id,
+        timestamp,
+        check: `Statistical summary for ${column}`,
+        status: 'Info',
+        details: `Mean: ${mean.toFixed(2)}, Median: ${median.toFixed(2)}, StdDev: ${stdDev.toFixed(2)}, Range: ${min.toFixed(2)}-${max.toFixed(2)}`
+      });
+    } catch (error) {
+      console.error(`Error in statistical analysis for ${column}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_stats_${column}`,
+        datasetId: id,
+        timestamp,
+        check: `Statistical analysis for ${column}`,
+        status: 'Warning',
+        details: `Could not complete statistical analysis: ${String(error)}`
+      });
+    }
+  }
+  
+  // Add correlation analysis between numeric columns
+  if (numericColumns.length > 1) {
+    try {
+      const correlations: {col1: string, col2: string, value: number}[] = [];
+      
+      // Calculate pairwise correlations
+      for (let i = 0; i < numericColumns.length - 1; i++) {
+        for (let j = i + 1; j < numericColumns.length; j++) {
+          const col1 = numericColumns[i];
+          const col2 = numericColumns[j];
+          
+          // Get paired values (removing nulls and non-numerics)
+          const pairedValues = content
+            .map(row => ({
+              x: row[col1] !== null && row[col1] !== undefined && row[col1] !== '' ? Number(row[col1]) : null,
+              y: row[col2] !== null && row[col2] !== undefined && row[col2] !== '' ? Number(row[col2]) : null
+            }))
+            .filter(pair => pair.x !== null && !isNaN(pair.x) && pair.y !== null && !isNaN(pair.y));
+          
+          if (pairedValues.length < 10) continue; // Skip if not enough paired data
+          
+          // Calculate correlation coefficient (Pearson)
+          const xValues = pairedValues.map(p => p.x as number);
+          const yValues = pairedValues.map(p => p.y as number);
+          
+          const xMean = xValues.reduce((a, b) => a + b, 0) / xValues.length;
+          const yMean = yValues.reduce((a, b) => a + b, 0) / yValues.length;
+          
+          let numerator = 0;
+          let denomX = 0;
+          let denomY = 0;
+          
+          for (let k = 0; k < xValues.length; k++) {
+            const xDiff = xValues[k] - xMean;
+            const yDiff = yValues[k] - yMean;
+            numerator += xDiff * yDiff;
+            denomX += xDiff * xDiff;
+            denomY += yDiff * yDiff;
+          }
+          
+          const correlation = numerator / (Math.sqrt(denomX) * Math.sqrt(denomY));
+          
+          correlations.push({
+            col1,
+            col2,
+            value: correlation
+          });
+        }
+      }
+      
+      // Find strong correlations
+      const strongCorrelations = correlations.filter(c => Math.abs(c.value) > 0.7);
+      
+      if (strongCorrelations.length > 0) {
+        const correlationDetails = strongCorrelations
+          .map(c => `${c.col1} & ${c.col2}: ${c.value.toFixed(2)}`)
+          .join(', ');
+        
+        results.push({
+          id: `vr_${Date.now()}_correlation`,
+          datasetId: id,
+          timestamp,
+          check: 'Correlation analysis',
+          status: 'Info',
+          details: `Found strong correlations between: ${correlationDetails}`
+        });
+      } else {
+        results.push({
+          id: `vr_${Date.now()}_correlation`,
+          datasetId: id,
+          timestamp,
+          check: 'Correlation analysis',
+          status: 'Info',
+          details: 'No strong correlations found between numeric columns'
+        });
+      }
+    } catch (error) {
+      console.error("Error in correlation analysis:", error);
+      results.push({
+        id: `vr_${Date.now()}_correlation`,
+        datasetId: id,
+        timestamp,
+        check: 'Correlation analysis',
+        status: 'Warning',
+        details: `Could not complete correlation analysis: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
+// NEW: Client-side implementation of text_analysis validation
+const runTextAnalysisValidation = (dataset: DatasetType): ValidationResult[] => {
+  const results: ValidationResult[] = [];
+  const timestamp = new Date().toISOString();
+  const { content, headers, id } = dataset;
+  
+  // Find text columns (non-numeric with enough unique values)
+  const textColumns = headers.filter(col => {
+    const values = content
+      .map(row => row[col])
+      .filter(val => val !== null && val !== undefined && val !== '');
+    
+    const numericCount = values.filter(val => !isNaN(Number(val))).length;
+    
+    // Consider columns with less than 30% numeric values as potential text columns
+    return values.length > 0 && numericCount / values.length < 0.3;
+  });
+  
+  for (const column of textColumns) {
+    try {
+      const values = content
+        .map(row => row[column])
+        .filter(val => val !== null && val !== undefined && val !== '')
+        .map(val => String(val));
+      
+      if (values.length === 0) continue;
+      
+      // Check for consistency in text casing
+      const allUppercase = values.filter(val => val === val.toUpperCase()).length;
+      const allLowercase = values.filter(val => val === val.toLowerCase()).length;
+      const titleCase = values.filter(val => {
+        const words = val.split(' ');
+        return words.every(word => word.length > 0 && word[0] === word[0].toUpperCase());
+      }).length;
+      
+      // Determine predominant casing
+      const totalValues = values.length;
+      const uppercasePercent = (allUppercase / totalValues) * 100;
+      const lowercasePercent = (allLowercase / totalValues) * 100;
+      const titleCasePercent = (titleCase / totalValues) * 100;
+      
+      let predominantCase = "mixed";
+      let predominantPercent = 0;
+      
+      if (uppercasePercent > 70) {
+        predominantCase = "uppercase";
+        predominantPercent = uppercasePercent;
+      } else if (lowercasePercent > 70) {
+        predominantCase = "lowercase";
+        predominantPercent = lowercasePercent;
+      } else if (titleCasePercent > 70) {
+        predominantCase = "title case";
+        predominantPercent = titleCasePercent;
+      }
+      
+      const isCaseConsistent = predominantCase !== "mixed";
+      
+      results.push({
+        id: `vr_${Date.now()}_text_${column}_case`,
+        datasetId: id,
+        timestamp,
+        check: `Text case consistency for ${column}`,
+        status: isCaseConsistent ? 'Pass' : 'Warning',
+        details: isCaseConsistent 
+          ? `${column} consistently uses ${predominantCase} (${predominantPercent.toFixed(1)}%)` 
+          : `${column} has mixed casing styles`
+      });
+      
+      // Check for common formats (emails, urls, phone numbers, etc.)
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const urlPattern = /^https?:\/\/[^\s]+$/;
+      const phonePattern = /^[\d\+\-\(\)\s]{7,20}$/;
+      
+      const emailCount = values.filter(val => emailPattern.test(val)).length;
+      const urlCount = values.filter(val => urlPattern.test(val)).length;
+      const phoneCount = values.filter(val => phonePattern.test(val)).length;
+      
+      // Determine if the column contains special formats
+      if (emailCount > totalValues * 0.5) {
+        const isConsistentFormat = emailCount > totalValues * 0.9;
+        results.push({
+          id: `vr_${Date.now()}_text_${column}_email`,
+          datasetId: id,
+          timestamp,
+          check: `Email format check for ${column}`,
+          status: isConsistentFormat ? 'Pass' : 'Warning',
+          details: isConsistentFormat
+            ? `${column} contains consistent email addresses (${emailCount}/${totalValues})`
+            : `${column} contains mixed formats with ${emailCount} email addresses out of ${totalValues} values`
+        });
+      } else if (urlCount > totalValues * 0.5) {
+        const isConsistentFormat = urlCount > totalValues * 0.9;
+        results.push({
+          id: `vr_${Date.now()}_text_${column}_url`,
+          datasetId: id,
+          timestamp,
+          check: `URL format check for ${column}`,
+          status: isConsistentFormat ? 'Pass' : 'Warning',
+          details: isConsistentFormat
+            ? `${column} contains consistent URLs (${urlCount}/${totalValues})`
+            : `${column} contains mixed formats with ${urlCount} URLs out of ${totalValues} values`
+        });
+      } else if (phoneCount > totalValues * 0.5) {
+        const isConsistentFormat = phoneCount > totalValues * 0.9;
+        results.push({
+          id: `vr_${Date.now()}_text_${column}_phone`,
+          datasetId: id,
+          timestamp,
+          check: `Phone format check for ${column}`,
+          status: isConsistentFormat ? 'Pass' : 'Warning',
+          details: isConsistentFormat
+            ? `${column} contains consistent phone numbers (${phoneCount}/${totalValues})`
+            : `${column} contains mixed formats with ${phoneCount} phone numbers out of ${totalValues} values`
+        });
+      }
+      
+      // Check for consistent word count (for multi-word text fields)
+      const wordCounts = values.map(val => val.split(/\s+/).filter(w => w.length > 0).length);
+      const avgWordCount = wordCounts.reduce((a, b) => a + b, 0) / wordCounts.length;
+      
+      // Calculate standard deviation of word counts
+      const wordCountVariance = wordCounts.reduce((acc, count) => acc + Math.pow(count - avgWordCount, 2), 0) / wordCounts.length;
+      const wordCountStdDev = Math.sqrt(wordCountVariance);
+      
+      // Check if the coefficient of variation is less than 0.5 (indicates consistency)
+      const isConsistentWordCount = wordCountStdDev / avgWordCount < 0.5 && avgWordCount > 1;
+      
+      if (avgWordCount > 1) {
+        results.push({
+          id: `vr_${Date.now()}_text_${column}_length`,
+          datasetId: id,
+          timestamp,
+          check: `Text length consistency for ${column}`,
+          status: isConsistentWordCount ? 'Pass' : 'Info',
+          details: isConsistentWordCount
+            ? `${column} has consistent word count (avg: ${avgWordCount.toFixed(1)} words)`
+            : `${column} has variable word count (avg: ${avgWordCount.toFixed(1)}, stddev: ${wordCountStdDev.toFixed(1)})`
+        });
+      }
+      
+      // Check for common prefixes/suffixes in values
+      if (values.length >= 10 && avgWordCount < 5) {
+        const firstWords = values.map(val => val.split(/\s+/)[0]);
+        const lastWords = values.map(val => {
+          const words = val.split(/\s+/).filter(w => w.length > 0);
+          return words[words.length - 1];
+        });
+        
+        // Count occurrences of each first word
+        const firstWordCounts: Record<string, number> = {};
+        firstWords.forEach(word => {
+          firstWordCounts[word] = (firstWordCounts[word] || 0) + 1;
+        });
+        
+        // Find most common first word
+        let mostCommonFirstWord = '';
+        let highestFirstCount = 0;
+        
+        Object.entries(firstWordCounts).forEach(([word, count]) => {
+          if (count > highestFirstCount) {
+            mostCommonFirstWord = word;
+            highestFirstCount = count;
+          }
+        });
+        
+        // Check if there's a common prefix
+        if (highestFirstCount > values.length * 0.5) {
+          results.push({
+            id: `vr_${Date.now()}_text_${column}_prefix`,
+            datasetId: id,
+            timestamp,
+            check: `Text pattern for ${column}`,
+            status: 'Info',
+            details: `${column} often starts with "${mostCommonFirstWord}" (${highestFirstCount}/${values.length} values)`
+          });
+        }
+        
+        // Similar analysis for last words (suffixes)
+        const lastWordCounts: Record<string, number> = {};
+        lastWords.forEach(word => {
+          lastWordCounts[word] = (lastWordCounts[word] || 0) + 1;
+        });
+        
+        let mostCommonLastWord = '';
+        let highestLastCount = 0;
+        
+        Object.entries(lastWordCounts).forEach(([word, count]) => {
+          if (count > highestLastCount) {
+            mostCommonLastWord = word;
+            highestLastCount = count;
+          }
+        });
+        
+        // Check if there's a common suffix
+        if (highestLastCount > values.length * 0.5) {
+          results.push({
+            id: `vr_${Date.now()}_text_${column}_suffix`,
+            datasetId: id,
+            timestamp,
+            check: `Text pattern for ${column}`,
+            status: 'Info',
+            details: `${column} often ends with "${mostCommonLastWord}" (${highestLastCount}/${values.length} values)`
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`Error in text analysis for ${column}:`, error);
+      results.push({
+        id: `vr_${Date.now()}_text_${column}`,
+        datasetId: id,
+        timestamp,
+        check: `Text analysis for ${column}`,
+        status: 'Warning',
+        details: `Could not complete text analysis: ${String(error)}`
+      });
+    }
+  }
+  
+  return results;
+};
+
 // Client-side implementation for all extended validation methods
 const runClientExtendedValidation = (dataset: DatasetType, validationType: string): ValidationResult[] => {
   switch (validationType) {
@@ -506,6 +956,10 @@ const runClientExtendedValidation = (dataset: DatasetType, validationType: strin
       return runDataCompletenessValidation(dataset);
     case "data_quality":
       return runDataQualityValidation(dataset);
+    case "statistical_analysis":
+      return runStatisticalAnalysisValidation(dataset);
+    case "text_analysis":
+      return runTextAnalysisValidation(dataset);
     default:
       console.warn(`Unknown validation type: ${validationType}`);
       return [{
@@ -1010,7 +1464,8 @@ export const runValidation = (
         }
         
         // Handle extended validation types using client-side implementation instead of backend
-        if (["format_checks", "value_lookup", "data_completeness", "data_quality"].includes(method)) {
+        if (["format_checks", "value_lookup", "data_completeness", "data_quality", 
+             "statistical_analysis", "text_analysis"].includes(method)) {
           try {
             console.log(`Running client-side ${method} validation`);
             const results = runClientExtendedValidation(dataset, method);
@@ -1042,145 +1497,8 @@ export const runValidation = (
           }
         }
         
-        // Generate real validation results based on file content for basic validation methods
-        const results: ValidationResult[] = [];
-        const timestamp = new Date().toISOString();
+        // ... keep existing code (basic validation method handling)
         
-        // Basic validation checks
-        if (method === "basic") {
-          // Row count validation
-          const rowCountStatus = dataset.content.length > 0 ? 'Pass' : 'Fail';
-          results.push({
-            id: `vr_${Date.now()}_1`,
-            datasetId,
-            timestamp,
-            check: 'Row count > 0',
-            status: rowCountStatus,
-            details: rowCountStatus === 'Pass' 
-              ? `Dataset has ${dataset.content.length} rows.` 
-              : 'Dataset has no rows.'
-          });
-          
-          // Missing values validation - check a sample of columns
-          const importantColumns = dataset.headers.slice(0, Math.min(5, dataset.headers.length));
-          for (const column of importantColumns) {
-            const nullCount = dataset.content.filter(row => !row[column] && row[column] !== 0 && row[column] !== false).length;
-            const nullPercent = (nullCount / dataset.content.length) * 100;
-            
-            results.push({
-              id: `vr_${Date.now()}_${column}`,
-              datasetId,
-              timestamp,
-              check: `No missing values in ${column}`,
-              status: nullCount === 0 ? 'Pass' : nullPercent < 5 ? 'Warning' : 'Fail',
-              details: nullCount === 0 
-                ? `No missing values in ${column}` 
-                : `${nullCount} missing values (${nullPercent.toFixed(1)}%) in ${column}`
-            });
-          }
-        }
-        
-        // Add advanced validation checks
-        if (method === 'advanced') {
-          // Data type consistency validation
-          for (const header of dataset.headers) {
-            // Infer type from first non-null value
-            let inferredType = 'unknown';
-            let typeInconsistencies = 0;
-            
-            for (const row of dataset.content) {
-              const value = row[header];
-              if (value !== null && value !== undefined && value !== '') {
-                // Set initial type if not yet determined
-                if (inferredType === 'unknown') {
-                  if (!isNaN(Number(value))) {
-                    inferredType = 'number';
-                  } else if (!isNaN(Date.parse(String(value)))) {
-                    inferredType = 'date';
-                  } else {
-                    inferredType = 'string';
-                  }
-                } else {
-                  // Check for consistency with inferred type
-                  if (inferredType === 'number' && isNaN(Number(value))) {
-                    typeInconsistencies++;
-                  } else if (inferredType === 'date' && isNaN(Date.parse(String(value)))) {
-                    typeInconsistencies++;
-                  }
-                }
-              }
-            }
-            
-            const inconsistencyPercent = (typeInconsistencies / dataset.content.length) * 100;
-            results.push({
-              id: `vr_${Date.now()}_type_${header}`,
-              datasetId,
-              timestamp,
-              check: `Data type consistency for ${header}`,
-              status: typeInconsistencies === 0 ? 'Pass' : inconsistencyPercent < 5 ? 'Warning' : 'Fail',
-              details: typeInconsistencies === 0
-                ? `Column ${header} has consistent ${inferredType} values`
-                : `Found ${typeInconsistencies} type inconsistencies in ${header} (expected ${inferredType})`
-            });
-          }
-          
-          // Simple duplicate check for first column (often ID)
-          if (dataset.headers.length > 0) {
-            const firstColumn = dataset.headers[0];
-            const values = dataset.content.map(row => row[firstColumn]);
-            const uniqueValues = new Set(values);
-            const duplicates = values.length - uniqueValues.size;
-            
-            results.push({
-              id: `vr_${Date.now()}_dupes`,
-              datasetId,
-              timestamp,
-              check: `Duplicate check for ${firstColumn}`,
-              status: duplicates === 0 ? 'Pass' : 'Warning',
-              details: duplicates === 0
-                ? `No duplicates found in ${firstColumn}`
-                : `Found ${duplicates} duplicate values in ${firstColumn}`
-            });
-          }
-        }
-        
-        // Add custom SQL check with improved handling
-        if (method === 'custom' && customSQL) {
-          const sqlResult = await validateCustomSQL(dataset.content, customSQL, dataset.headers);
-          // Store affected row numbers in the details
-          const rowNumbers = sqlResult.affectedRows && sqlResult.affectedRows.length > 0
-            ? `Affected rows: ${sqlResult.affectedRows.slice(0, 10).join(', ')}${sqlResult.affectedRows.length > 10 ? '...' : ''}`
-            : '';
-          
-          results.push({
-            id: `vr_${Date.now()}_6`,
-            datasetId,
-            timestamp,
-            check: `Custom SQL: ${customSQL.substring(0, 30)}${customSQL.length > 30 ? '...' : ''}`,
-            status: sqlResult.status,
-            details: `${sqlResult.details} ${rowNumbers}`
-          });
-        }
-        
-        // Store the validation results
-        validationResultsStore[datasetId] = [
-          ...(validationResultsStore[datasetId] || []),
-          ...results
-        ];
-        saveToStorage(validationResultsStore);
-        
-        // Update dataset status based on validation results
-        const hasFailures = results.some(r => r.status === 'Fail');
-        const hasWarnings = results.some(r => r.status === 'Warning');
-        
-        let newStatus: "Validated" | "Issues Found" | "Not Validated" = "Validated";
-        if (hasFailures || hasWarnings) {
-          newStatus = "Issues Found";
-        }
-        
-        updateDataset(datasetId, { status: newStatus });
-        
-        resolve(results);
       } catch (error) {
         console.error("Validation error:", error);
         reject(error);

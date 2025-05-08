@@ -52,3 +52,16 @@ export {
 
 // Re-export types
 export type { DatasetType, ValidationResult, ComparisonResultType } from './types';
+
+// Export validation method types for better TypeScript support
+export const ValidationMethods = {
+  BASIC: "basic",
+  ADVANCED: "advanced",
+  CUSTOM: "custom",
+  FORMAT_CHECKS: "format_checks",
+  VALUE_LOOKUP: "value_lookup",
+  DATA_COMPLETENESS: "data_completeness",
+  DATA_QUALITY: "data_quality",
+  STATISTICAL_ANALYSIS: "statistical_analysis",
+  TEXT_ANALYSIS: "text_analysis"
+};
