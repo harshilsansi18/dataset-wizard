@@ -17,6 +17,20 @@ import {
   validateConnectionParams,
   API_URL
 } from './databaseService';
+import {
+  createValidationTemplate,
+  getValidationTemplates,
+  getValidationTemplateById,
+  updateValidationTemplate,
+  deleteValidationTemplate,
+  generateValidationReport,
+  getValidationReports,
+  getValidationReportById,
+  getValidationReportsByDatasetId,
+  deleteValidationReport,
+  downloadReportAsCSV,
+  downloadReportAsPDF
+} from './reportService';
 
 // Re-export all service functions to streamline imports
 export {
@@ -47,11 +61,24 @@ export {
   ensureImportedDatasetsAvailable,
   clearDatabaseData,
   validateConnectionParams,
-  API_URL
+  API_URL,
+  // Report and template related functions
+  createValidationTemplate,
+  getValidationTemplates,
+  getValidationTemplateById,
+  updateValidationTemplate,
+  deleteValidationTemplate,
+  generateValidationReport,
+  getValidationReports,
+  getValidationReportById,
+  getValidationReportsByDatasetId,
+  deleteValidationReport,
+  downloadReportAsCSV,
+  downloadReportAsPDF
 };
 
 // Re-export types
-export type { DatasetType, ValidationResult, ComparisonResultType } from './types';
+export type { DatasetType, ValidationResult, ComparisonResultType, ValidationTemplate, ValidationReport } from './types';
 
 // Export validation method types for better TypeScript support
 export const ValidationMethods = {
@@ -63,5 +90,8 @@ export const ValidationMethods = {
   DATA_COMPLETENESS: "data_completeness",
   DATA_QUALITY: "data_quality",
   STATISTICAL_ANALYSIS: "statistical_analysis",
-  TEXT_ANALYSIS: "text_analysis"
+  TEXT_ANALYSIS: "text_analysis",
+  CROSS_COLUMN: "cross_column",
+  REGEX_PATTERN: "regex_pattern",
+  SCHEMA_VALIDATION: "schema_validation"
 };

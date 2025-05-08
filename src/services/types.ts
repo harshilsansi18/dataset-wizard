@@ -28,6 +28,33 @@ export type ValidationResult = {
   check: string;
   status: "Pass" | "Fail" | "Warning" | "Info";
   details: string;
+  category?: string; // New field for categorizing validation results
+  affectedRows?: number[]; // New field for highlighting affected rows
+  affectedColumns?: string[]; // New field for highlighting affected columns
+  remediationSuggestion?: string; // New field for providing fix suggestions
+};
+
+export type ValidationTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  validationMethods: string[];
+  customParams?: Record<string, any>;
+};
+
+export type ValidationReport = {
+  id: string;
+  datasetId: string;
+  datasetName: string;
+  timestamp: string;
+  summary: {
+    total: number;
+    pass: number;
+    fail: number;
+    warning: number;
+    info: number;
+  };
+  results: ValidationResult[];
 };
 
 export type ComparisonResultType = {

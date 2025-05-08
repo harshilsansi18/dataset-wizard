@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/theme/theme-provider";
 import { useEffect } from "react";
 
 import Navbar from "@/components/navigation/Navbar";
-import AIChatbot from "@/components/AIChatbot";
+import AIChatbotEnhanced from "@/components/AIChatbotEnhanced";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
@@ -46,7 +46,7 @@ const AppContent = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </main>
-            <AIChatbot />
+            <AIChatbotEnhanced />
           </div>
         </BrowserRouter>
       </TooltipProvider>
