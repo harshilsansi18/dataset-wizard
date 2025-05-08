@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -245,10 +244,43 @@ const Validation = () => {
       const warningCount = results.filter(r => r.status === "Warning").length;
       const failCount = results.filter(r => r.status === "Fail").length;
       
-      toast({
-        title: "Validation complete",
-        description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
-      });
+      // Get the dataset name for the report
+      const selectedDs = datasets.find(d => d.id === selectedDataset);
+      if (selectedDs && results.length > 0) {
+        // Generate report from validation results
+        const { getValidationReportById, generateValidationReport } = await import('@/services/api');
+        
+        try {
+          // Generate the report
+          const report = await generateValidationReport(
+            selectedDataset,
+            selectedDs.name,
+            results
+          );
+          
+          // Add report ID to session storage to highlight it on reports page
+          sessionStorage.setItem('highlightReportId', report.id);
+          
+          console.log("Generated validation report:", report.id);
+          
+          toast({
+            title: "Validation complete",
+            description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures. Report generated.`,
+          });
+        } catch (error) {
+          console.error("Error generating report:", error);
+          toast({
+            title: "Report Generation Failed",
+            description: "The validation ran successfully but there was an issue creating the report.",
+            variant: "destructive"
+          });
+        }
+      } else {
+        toast({
+          title: "Validation complete",
+          description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
+        });
+      }
       
       fetchDatasets();
     } catch (error) {

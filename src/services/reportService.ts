@@ -151,34 +151,57 @@ export const generateValidationReport = (
   datasetId: string, 
   datasetName: string, 
   results: ValidationResult[]
-): ValidationReport => {
-  const summary = results.reduce(
-    (acc, result) => {
-      acc.total += 1;
-      acc[result.status.toLowerCase() as keyof typeof acc] += 1;
-      return acc;
-    },
-    { total: 0, pass: 0, fail: 0, warning: 0, info: 0 }
-  );
-  
-  const newReport: ValidationReport = {
-    id: `vr_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-    datasetId,
-    datasetName,
-    timestamp: new Date().toISOString(),
-    summary,
-    results: [...results],
-  };
-  
-  reportsStore = [newReport, ...reportsStore];
-  saveReportsToStorage();
-  
-  return newReport;
+): Promise<ValidationReport> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Add categories to results if they don't have one
+      const categorizedResults = results.map(result => {
+        if (!result.category) {
+          // Extract category from check name or use default
+          const words = result.check.split(' ');
+          const category = words.length > 0 ? words[0] : 'Other';
+          return { ...result, category };
+        }
+        return result;
+      });
+      
+      const summary = categorizedResults.reduce(
+        (acc, result) => {
+          acc.total += 1;
+          acc[result.status.toLowerCase() as keyof typeof acc] += 1;
+          return acc;
+        },
+        { total: 0, pass: 0, fail: 0, warning: 0, info: 0 }
+      );
+      
+      const newReport: ValidationReport = {
+        id: `vr_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        datasetId,
+        datasetName,
+        timestamp: new Date().toISOString(),
+        summary,
+        results: categorizedResults,
+      };
+      
+      reportsStore = [newReport, ...reportsStore];
+      saveReportsToStorage();
+      
+      console.log("Generated new validation report:", newReport);
+      
+      toast({
+        title: "Report Generated",
+        description: `Validation report for "${datasetName}" has been created.`,
+      });
+      
+      resolve(newReport);
+    }, 300);
+  });
 };
 
 export const getValidationReports = (): Promise<ValidationReport[]> => {
   return new Promise((resolve) => {
     setTimeout(() => {
+      console.log("Fetching validation reports:", reportsStore.length);
       resolve([...reportsStore]);
     }, 300);
   });

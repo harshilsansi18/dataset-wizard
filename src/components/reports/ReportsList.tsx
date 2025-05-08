@@ -1,36 +1,67 @@
 
-import React from 'react';
 import { ValidationReport } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { CheckCircle, XCircle, AlertTriangle, Info, RefreshCw, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-import { FileText, RefreshCw, AlertCircle, CheckCircle, AlertTriangle, Info } from "lucide-react";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useState } from "react";
 
-type ReportsListProps = {
+interface ReportsListProps {
   reports: ValidationReport[];
   isLoading: boolean;
   selectedReportId: string | null;
   onSelectReport: (id: string) => void;
   onRefresh: () => void;
-};
+  onDelete?: (id: string) => void;
+}
 
-const ReportsList = ({ 
-  reports, 
-  isLoading, 
-  selectedReportId, 
-  onSelectReport, 
-  onRefresh 
+const ReportsList = ({
+  reports,
+  isLoading,
+  selectedReportId,
+  onSelectReport,
+  onRefresh,
+  onDelete
 }: ReportsListProps) => {
+  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+
+  const getStatusIcon = (report: ValidationReport) => {
+    if (report.summary.fail > 0) {
+      return <XCircle className="h-4 w-4 text-red-500" />;
+    } else if (report.summary.warning > 0) {
+      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+    } else {
+      return <CheckCircle className="h-4 w-4 text-green-500" />;
+    }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (reportToDelete && onDelete) {
+      onDelete(reportToDelete);
+      setReportToDelete(null);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="space-y-3 px-6">
-        {Array(5).fill(null).map((_, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <Skeleton className="h-10 w-10 rounded-md" />
-            <div className="space-y-1 flex-1">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-3 w-1/2" />
+      <div className="space-y-2 p-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="flex items-center space-x-3">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-[200px]" />
+              <Skeleton className="h-3 w-[150px]" />
             </div>
           </div>
         ))}
@@ -40,73 +71,93 @@ const ReportsList = ({
 
   if (reports.length === 0) {
     return (
-      <div className="text-center p-6 text-muted-foreground">
-        <FileText className="h-10 w-10 mx-auto mb-2" />
-        <p>No validation reports available</p>
-        <Button variant="outline" size="sm" className="mt-4" onClick={onRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
+      <div className="text-center px-4 py-8">
+        <p className="text-muted-foreground mb-4">No validation reports found</p>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="h-3 w-3 mr-2" />
+          Refresh Reports
         </Button>
       </div>
     );
   }
 
   return (
-    <ScrollArea className="h-[400px]">
-      <div className="px-1">
-        {reports.map((report) => {
-          // Calculate icon and color based on results
-          const hasFailures = report.summary.fail > 0;
-          const hasWarnings = report.summary.warning > 0;
-          
-          let StatusIcon = CheckCircle;
-          let statusColorClass = "text-green-500";
-          
-          if (hasFailures) {
-            StatusIcon = AlertCircle;
-            statusColorClass = "text-red-500";
-          } else if (hasWarnings) {
-            StatusIcon = AlertTriangle;
-            statusColorClass = "text-amber-500";
-          }
-
-          return (
-            <button
-              key={report.id}
-              onClick={() => onSelectReport(report.id)}
-              className={`w-full text-left px-4 py-3 rounded-md flex items-start gap-3 hover:bg-muted/30 transition-colors ${
-                selectedReportId === report.id ? "bg-muted" : ""
+    <div className="space-y-1">
+      {reports.map((report) => (
+        <button
+          key={report.id}
+          className={`w-full px-4 py-2 flex justify-between items-center hover:bg-accent/50 focus:bg-accent/50 text-left ${
+            selectedReportId === report.id ? "bg-accent" : ""
+          }`}
+          onClick={() => onSelectReport(report.id)}
+        >
+          <div className="flex items-center space-x-3 max-w-[85%]">
+            <div 
+              className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
+                report.summary.fail > 0 
+                  ? "bg-red-100 text-red-500" 
+                  : report.summary.warning > 0 
+                  ? "bg-amber-100 text-amber-500" 
+                  : "bg-green-100 text-green-500"
               }`}
             >
-              <StatusIcon className={`h-5 w-5 mt-1 ${statusColorClass}`} />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{report.datasetName}</p>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  <span>{format(new Date(report.timestamp), 'MMM d, yyyy h:mm a')}</span>
-                  <span className="mx-1">•</span>
-                  <span className="font-medium">{report.summary.total} checks</span>
-                </div>
-                <div className="flex gap-2 mt-1.5">
-                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                    {report.summary.pass} Pass
-                  </span>
-                  {report.summary.fail > 0 && (
-                    <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
-                      {report.summary.fail} Fail
-                    </span>
-                  )}
-                  {report.summary.warning > 0 && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                      {report.summary.warning} Warning
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </ScrollArea>
+              {getStatusIcon(report)}
+            </div>
+            <div className="min-w-0 truncate">
+              <p className="text-sm font-medium truncate">{report.datasetName}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {format(new Date(report.timestamp), 'MMM d, yyyy h:mm a')}
+              </p>
+            </div>
+          </div>
+          
+          {onDelete && (
+            <AlertDialog open={reportToDelete === report.id} onOpenChange={(isOpen) => {
+              if (!isOpen) setReportToDelete(null);
+            }}>
+              <AlertDialogTrigger asChild onClick={(e) => {
+                e.stopPropagation();
+                setReportToDelete(report.id);
+              }}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full opacity-70 hover:opacity-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete validation report?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete the validation report for "{report.datasetName}".
+                    This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={handleDeleteConfirm}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </button>
+      ))}
+      
+      {reports.length > 0 && (
+        <div className="px-4 pt-2 pb-4">
+          <Button variant="outline" size="sm" className="w-full" onClick={onRefresh}>
+            <RefreshCw className="h-3 w-3 mr-2" />
+            Refresh Reports
+          </Button>
+        </div>
+      )}
+    </div>
   );
 };
 

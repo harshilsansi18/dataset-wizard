@@ -1,16 +1,18 @@
+
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
   getValidationReports, 
   downloadReportAsCSV, 
   downloadReportAsPDF,
-  ValidationReport
+  ValidationReport,
+  deleteValidationReport
 } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, FileText, FileDown, FileText as FileDocument, ChartBar } from "lucide-react";
+import { CalendarDays, FileText, FileDown, FileText as FileDocument, ChartBar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import ValidationSummaryCard from "@/components/reports/ValidationSummaryCard";
 import ReportsList from "@/components/reports/ReportsList";
@@ -31,7 +33,9 @@ const Reports = () => {
   } = useQuery({
     queryKey: ['validationReports'],
     queryFn: async () => {
+      console.log("Fetching validation reports");
       const reports = await getValidationReports();
+      console.log(`Found ${reports.length} reports`);
       return reports;
     }
   });
@@ -77,12 +81,45 @@ const Reports = () => {
     }
   };
   
+  // Handle report deletion
+  const handleDeleteReport = async (reportId: string) => {
+    try {
+      const success = await deleteValidationReport(reportId);
+      if (success) {
+        if (selectedReportId === reportId) {
+          setSelectedReportId(null);
+        }
+        refetch();
+        toast({
+          title: "Report Deleted",
+          description: "The validation report has been deleted successfully."
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast({
+        title: "Deletion Failed",
+        description: "Failed to delete the report.",
+        variant: "destructive"
+      });
+    }
+  };
+  
   // Effect to handle case where selected report is deleted
   useEffect(() => {
     if (selectedReportId && !reports.some(r => r.id === selectedReportId)) {
       setSelectedReportId(null);
     }
   }, [reports, selectedReportId]);
+  
+  // Check for highlighted report from validation page
+  useEffect(() => {
+    const highlightReportId = sessionStorage.getItem('highlightReportId');
+    if (highlightReportId) {
+      setSelectedReportId(highlightReportId);
+      sessionStorage.removeItem('highlightReportId');
+    }
+  }, [reports]);
 
   return (
     <div className="container py-6 max-w-7xl mx-auto">
@@ -122,6 +159,7 @@ const Reports = () => {
                     selectedReportId={selectedReportId}
                     onSelectReport={(id) => setSelectedReportId(id)}
                     onRefresh={refetch}
+                    onDelete={handleDeleteReport}
                   />
                 </CardContent>
               </Card>

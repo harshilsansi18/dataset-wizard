@@ -24,8 +24,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Bot, User, Send, ArrowRight, AlertTriangle, Check, Database, ArrowUpRight } from "lucide-react";
-import { getDatasets, runValidation, ValidationMethods } from "@/services/api";
+import { useNavigate } from "react-router-dom";
+import { MessageSquare, Bot, User, Send, ArrowRight, AlertTriangle, Check, Database, ArrowUpRight, Upload, FileText } from "lucide-react";
+import { getDatasets, runValidation, ValidationMethods, generateValidationReport } from "@/services/api";
 
 type Message = {
   id: string;
@@ -42,6 +43,7 @@ type ValidationSuggestion = {
 };
 
 const AIChatbotEnhanced = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -79,11 +81,59 @@ const AIChatbotEnhanced = () => {
     setIsProcessing(true);
     
     try {
-      // Simulate AI processing
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
       // Process user message to find intents and keywords
       const userInput = userMessage.content.toLowerCase();
+      
+      // Check for navigation requests
+      if (userInput.includes("go to validation") || userInput.includes("validate data") || userInput.includes("run validation")) {
+        // Add a response message
+        const botMessage: Message = {
+          id: `msg_${Date.now()}_bot`,
+          content: "I'll take you to the validation page where you can run data validation checks.",
+          role: "assistant",
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        
+        // Navigate after a short delay
+        setTimeout(() => {
+          navigate('/validation');
+          setIsProcessing(false);
+        }, 1000);
+        return;
+      }
+      
+      if (userInput.includes("go to reports") || userInput.includes("show reports") || userInput.includes("view reports")) {
+        const botMessage: Message = {
+          id: `msg_${Date.now()}_bot`,
+          content: "I'll take you to the reports page where you can see all validation reports.",
+          role: "assistant",
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        
+        setTimeout(() => {
+          navigate('/reports');
+          setIsProcessing(false);
+        }, 1000);
+        return;
+      }
+      
+      if (userInput.includes("go to datasets") || userInput.includes("view datasets") || userInput.includes("manage datasets")) {
+        const botMessage: Message = {
+          id: `msg_${Date.now()}_bot`,
+          content: "I'll take you to the datasets page where you can manage your data files.",
+          role: "assistant",
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        
+        setTimeout(() => {
+          navigate('/datasets');
+          setIsProcessing(false);
+        }, 1000);
+        return;
+      }
       
       // Check for validation-related queries
       const isValidationQuery = 
@@ -134,16 +184,69 @@ const AIChatbotEnhanced = () => {
           });
           
           setSuggestions(validationSuggestions);
-          response = `I can help you validate your datasets. Would you like to run validation on a specific dataset? I've found ${datasets.length} datasets in your system.`;
+          response = `I can help you validate your datasets. I've found ${datasets.length} datasets in your system. Click on a suggestion to run validation:`;
         } else {
-          response = "I can help you validate your data, but I don't see any datasets in your system. Would you like to learn how to upload a dataset for validation?";
+          response = "I can help you validate your data, but I don't see any datasets in your system. Would you like to go to the datasets page to upload a file first?";
+          
+          // Add upload dataset suggestion
+          setSuggestions([{
+            datasetName: "Upload new dataset",
+            datasetId: "upload",
+            method: "upload",
+            description: "Go to datasets page to upload a new file"
+          }]);
         }
       } else if (userInput.includes("help") || userInput.includes("explain") || userInput.includes("how")) {
-        response = "I can help you with data validation tasks such as checking data quality, finding missing values, validating formats, and analyzing patterns. I can also help you generate reports and provide suggestions for improving your data. What specific aspect would you like to learn more about?";
+        response = "I can help you with several tasks:\n\n• Validate datasets for quality issues\n• Generate validation reports\n• Check for missing values or formatting issues\n• Navigate to different parts of the application\n\nWhat would you like to do?";
+        
+        // Add helpful action suggestions
+        setSuggestions([
+          {
+            datasetName: "Run validation",
+            datasetId: "validation",
+            method: "navigate",
+            description: "Go to validation page"
+          },
+          {
+            datasetName: "View reports",
+            datasetId: "reports",
+            method: "navigate",
+            description: "Go to reports page"
+          },
+          {
+            datasetName: "Manage datasets",
+            datasetId: "datasets",
+            method: "navigate",
+            description: "Go to datasets page"
+          }
+        ]);
       } else if (userInput.includes("thank")) {
         response = "You're welcome! I'm here to help with all your data validation needs. Let me know if you have any more questions.";
+        setSuggestions([]);
       } else {
-        response = "I'm here to help with your data validation needs. You can ask me about validating datasets, checking data quality, or generating reports. What would you like to do?";
+        response = "I can help you validate data, generate reports, or navigate to different sections of the app. What would you like to do?";
+        
+        // Add general action suggestions
+        setSuggestions([
+          {
+            datasetName: "Run validation",
+            datasetId: "validation",
+            method: "navigate",
+            description: "Go to validation page"
+          },
+          {
+            datasetName: "View reports",
+            datasetId: "reports",
+            method: "navigate",
+            description: "Go to reports page"
+          },
+          {
+            datasetName: "Manage datasets",
+            datasetId: "datasets",
+            method: "navigate",
+            description: "Go to datasets page"
+          }
+        ]);
       }
       
       const botMessage: Message = {
@@ -171,6 +274,73 @@ const AIChatbotEnhanced = () => {
     try {
       setIsProcessing(true);
       
+      // Handle navigation suggestions
+      if (suggestion.method === "navigate" || suggestion.datasetId === "validation" || 
+          suggestion.datasetId === "reports" || suggestion.datasetId === "datasets") {
+        
+        // Add a new message showing the navigation
+        const userMessage: Message = {
+          id: `msg_${Date.now()}_nav`,
+          content: `Go to ${suggestion.description.split(" ")[2]} page`,
+          role: "user",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, userMessage]);
+        
+        // Add response
+        const botMessage: Message = {
+          id: `msg_${Date.now()}_navresponse`,
+          content: `Taking you to the ${suggestion.description.split(" ")[2]} page...`,
+          role: "assistant",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, botMessage]);
+        
+        // Navigate to the appropriate page
+        setTimeout(() => {
+          if (suggestion.datasetId === "validation") {
+            navigate('/validation');
+          } else if (suggestion.datasetId === "reports") {
+            navigate('/reports');
+          } else if (suggestion.datasetId === "datasets") {
+            navigate('/datasets');
+          }
+          setIsProcessing(false);
+        }, 1000);
+        
+        return;
+      }
+      
+      // Handle upload dataset suggestion
+      if (suggestion.method === "upload" || suggestion.datasetId === "upload") {
+        const userMessage: Message = {
+          id: `msg_${Date.now()}_upload`,
+          content: "Upload a new dataset",
+          role: "user",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, userMessage]);
+        
+        const botMessage: Message = {
+          id: `msg_${Date.now()}_uploadresponse`,
+          content: "Taking you to the datasets page where you can upload a new file...",
+          role: "assistant",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, botMessage]);
+        
+        setTimeout(() => {
+          navigate('/datasets');
+          setIsProcessing(false);
+        }, 1000);
+        
+        return;
+      }
+      
       // Add a new message from the user
       const userMessage: Message = {
         id: `msg_${Date.now()}_run`,
@@ -181,7 +351,7 @@ const AIChatbotEnhanced = () => {
       
       setMessages(prev => [...prev, userMessage]);
       
-      // Simulate validation process
+      // Add running message
       const botMessage: Message = {
         id: `msg_${Date.now()}_running`,
         content: `Starting ${suggestion.method.replace('_', ' ')} validation on "${suggestion.datasetName}"...`,
@@ -192,18 +362,53 @@ const AIChatbotEnhanced = () => {
       setMessages(prev => [...prev, botMessage]);
       
       // Run the actual validation
-      await runValidation(suggestion.datasetId, suggestion.method);
+      const validationResults = await runValidation(suggestion.datasetId, suggestion.method);
       
-      // Success message
-      const resultMessage: Message = {
-        id: `msg_${Date.now()}_result`,
-        content: `Validation complete! The ${suggestion.method.replace('_', ' ')} validation has been run on "${suggestion.datasetName}". You can view the results in the Validation section.`,
-        role: "assistant",
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, resultMessage]);
-      setSuggestions([]);
+      // Generate a report from the validation results
+      if (validationResults && validationResults.length > 0) {
+        // Get the dataset name from the suggestion
+        const reportData = await generateValidationReport(
+          suggestion.datasetId,
+          suggestion.datasetName,
+          validationResults
+        );
+
+        // Success message with report details
+        const resultMessage: Message = {
+          id: `msg_${Date.now()}_result`,
+          content: `Validation complete! 
+          
+The ${suggestion.method.replace('_', ' ')} validation on "${suggestion.datasetName}" found:
+- ${validationResults.filter(r => r.status === "Pass").length} passing checks
+- ${validationResults.filter(r => r.status === "Fail").length} failing checks
+- ${validationResults.filter(r => r.status === "Warning").length} warnings
+
+A report has been generated. Would you like to view it?`,
+          role: "assistant",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, resultMessage]);
+        
+        // Add report suggestion
+        setSuggestions([{
+          datasetName: "View Report",
+          datasetId: "reports",
+          method: "navigate",
+          description: "Go to reports page"
+        }]);
+      } else {
+        // Error message if no results
+        const errorMessage: Message = {
+          id: `msg_${Date.now()}_error`,
+          content: `The validation was run but didn't produce any results. This might be an issue with the dataset or validation method.`,
+          role: "assistant",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+        setSuggestions([]);
+      }
       
       toast({
         title: "Validation Complete",
@@ -304,7 +509,7 @@ const AIChatbotEnhanced = () => {
               {suggestions.length > 0 && (
                 <div className="mt-4">
                   <p className="text-sm text-muted-foreground mb-2">
-                    Suggested validations:
+                    Suggested actions:
                   </p>
                   <div className="space-y-2">
                     {suggestions.map((suggestion, index) => (
@@ -316,7 +521,11 @@ const AIChatbotEnhanced = () => {
                         disabled={isProcessing}
                       >
                         <div className="mr-2">
-                          {suggestion.method === ValidationMethods.BASIC ? (
+                          {suggestion.method === "upload" ? (
+                            <Upload className="h-4 w-4" />
+                          ) : suggestion.method === "navigate" ? (
+                            <ArrowUpRight className="h-4 w-4" />
+                          ) : suggestion.method === ValidationMethods.BASIC ? (
                             <Check className="h-4 w-4" />
                           ) : suggestion.method === ValidationMethods.DATA_COMPLETENESS ? (
                             <Database className="h-4 w-4" />
