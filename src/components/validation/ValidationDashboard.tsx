@@ -98,11 +98,22 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     onRunValidation(method);
   };
 
+  // Function to determine alert variant based on result counts
+  const getAlertVariant = () => {
+    if (resultCounts.fail > 0) {
+      return "destructive";
+    } else if (resultCounts.warning > 0) {
+      return "default";
+    } else {
+      return "default";
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary Alert */}
       {validationResults.length > 0 && (
-        <Alert variant={resultCounts.fail > 0 ? "destructive" : resultCounts.warning > 0 ? "warning" : "default"}>
+        <Alert variant={getAlertVariant()}>
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Validation Summary</AlertTitle>
           <AlertDescription>

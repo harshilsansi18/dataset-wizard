@@ -26,7 +26,7 @@ export type ValidationResult = {
   datasetId: string;
   timestamp: string;
   check: string;
-  status: "Pass" | "Fail" | "Warning";
+  status: "Pass" | "Fail" | "Warning" | "Info";
   details: string;
 };
 
