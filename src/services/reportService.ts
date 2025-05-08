@@ -154,6 +154,7 @@ export const generateValidationReport = (
 ): Promise<ValidationReport> => {
   return new Promise((resolve) => {
     setTimeout(() => {
+      console.log("Generating validation report for:", datasetName, "with", results.length, "results");
       // Add categories to results if they don't have one
       const categorizedResults = results.map(result => {
         if (!result.category) {

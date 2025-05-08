@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { ValidationResult, DatasetType } from "@/services/types";
 import ValidationCharts from "./ValidationCharts";
 import ValidationIssuesList from "./ValidationIssuesList";
 import { ValidationMethods } from "@/services/api";
+import { generateValidationReport } from "@/services/reportService";
 
 interface ValidationDashboardProps {
   dataset: DatasetType;
