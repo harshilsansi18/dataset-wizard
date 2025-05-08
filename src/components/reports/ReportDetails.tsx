@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ValidationReport } from "@/services/api";
 import { 
@@ -12,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { format } from "date-fns";
-import { FileText, Download, FilePdf, FileExcel, ChartBar } from "lucide-react";
+import { FileText, Download, FileDown, FileText as FileDocument, ChartBar } from "lucide-react";
 import { 
   PieChart, 
   Pie, 
@@ -68,11 +67,11 @@ const ReportDetails = ({ report, onDownloadCSV, onDownloadPDF }: ReportDetailsPr
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onDownloadCSV}>
-              <FileExcel className="h-4 w-4 mr-1" />
+              <FileText className="h-4 w-4 mr-1" />
               CSV
             </Button>
             <Button variant="outline" size="sm" onClick={onDownloadPDF}>
-              <FilePdf className="h-4 w-4 mr-1" />
+              <FileDown className="h-4 w-4 mr-1" />
               PDF
             </Button>
           </div>

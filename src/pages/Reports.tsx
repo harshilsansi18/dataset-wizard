@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -11,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, FileText, FilePdf, FileExcel, ChartBar } from "lucide-react";
+import { CalendarDays, FileText, FileDown, FileText as FileDocument, ChartBar } from "lucide-react";
 import { format } from "date-fns";
 import ValidationSummaryCard from "@/components/reports/ValidationSummaryCard";
 import ReportsList from "@/components/reports/ReportsList";

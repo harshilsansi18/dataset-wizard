@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -52,7 +51,7 @@ type ReportTemplatesProps = {
 // Form schema
 const templateFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  description: z.string(),
+  description: z.string().default(""),
   validationMethods: z.array(z.string()).min(1, "Select at least one validation method")
 });
 
@@ -96,12 +95,19 @@ const ReportTemplates = ({ onRefresh }: ReportTemplatesProps) => {
   // Handle form submission
   const onSubmit = async (data: z.infer<typeof templateFormSchema>) => {
     try {
+      // Ensure all required fields are present
+      const templateData: Omit<ValidationTemplate, "id"> = {
+        name: data.name,
+        description: data.description || "", // Provide default empty string
+        validationMethods: data.validationMethods
+      };
+      
       if (editingTemplate) {
         // Update existing template
-        await updateValidationTemplate(editingTemplate.id, data);
+        await updateValidationTemplate(editingTemplate.id, templateData);
       } else {
         // Create new template
-        await createValidationTemplate(data);
+        await createValidationTemplate(templateData);
       }
       
       // Reset and close
