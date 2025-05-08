@@ -139,7 +139,10 @@ const ReportsList = ({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction variant="destructive" onClick={handleDeleteConfirm}>
+                  <AlertDialogAction 
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90" 
+                    onClick={handleDeleteConfirm}
+                  >
                     Delete
                   </AlertDialogAction>
                 </AlertDialogFooter>
