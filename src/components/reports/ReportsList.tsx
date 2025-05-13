@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface ReportsListProps {
   reports: ValidationReport[];
@@ -35,6 +35,21 @@ const ReportsList = ({
   onDelete
 }: ReportsListProps) => {
   const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  const [highlightedReport, setHighlightedReport] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check if there's a highlighted report in session storage (from validation page)
+    const reportId = sessionStorage.getItem('highlightReportId');
+    if (reportId) {
+      setHighlightedReport(reportId);
+      onSelectReport(reportId);
+      // Clear the highlight after selection
+      setTimeout(() => {
+        setHighlightedReport(null);
+        sessionStorage.removeItem('highlightReportId');
+      }, 2000);
+    }
+  }, [reports, onSelectReport]);
 
   const getStatusIcon = (report: ValidationReport) => {
     if (report.summary.fail > 0) {
@@ -88,7 +103,7 @@ const ReportsList = ({
           key={report.id}
           className={`w-full px-4 py-2 flex justify-between items-center hover:bg-accent/50 focus:bg-accent/50 text-left ${
             selectedReportId === report.id ? "bg-accent" : ""
-          }`}
+          } ${highlightedReport === report.id ? "ring-2 ring-primary animate-pulse" : ""}`}
           onClick={() => onSelectReport(report.id)}
         >
           <div className="flex items-center space-x-3 max-w-[85%]">

@@ -43,7 +43,21 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       if (validationResults.length > 0 && dataset) {
         try {
           console.log("Generating validation report for:", dataset.name, "with", validationResults.length, "results");
-          const report = await generateValidationReport(dataset.id, dataset.name, validationResults);
+          
+          // Ensure all validation results have datasetId
+          const resultsWithDatasetId = validationResults.map(result => {
+            if (!result.datasetId) {
+              return { ...result, datasetId: dataset.id };
+            }
+            return result;
+          });
+          
+          const report = await generateValidationReport(
+            dataset.id, 
+            dataset.name, 
+            resultsWithDatasetId
+          );
+          
           console.log("Generated validation report:", report);
           
           // Store report ID in session storage to highlight it on reports page
@@ -65,7 +79,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     };
 
     generateReport();
-  }, [validationResults, dataset]);
+  }, [validationResults, dataset, toast]);
 
   // Create validation method cards
   const validationMethods = [
@@ -128,6 +142,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   ];
 
   const handleRunValidation = (method: string) => {
+    console.log("Running validation method:", method);
     onRunValidation(method);
   };
 

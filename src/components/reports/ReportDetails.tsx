@@ -35,6 +35,24 @@ type ReportDetailsProps = {
 const ReportDetails = ({ report, onDownloadCSV, onDownloadPDF }: ReportDetailsProps) => {
   const [activeTab, setActiveTab] = useState("overview");
   
+  // Ensure report has a proper structure to avoid errors
+  if (!report || !report.results || !report.summary) {
+    console.error("Invalid report structure:", report);
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Error Loading Report</CardTitle>
+          <CardDescription>
+            This report appears to be invalid or incomplete
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p>Please try selecting another report or generate a new validation.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  
   // Chart data
   const pieData = [
     { name: 'Pass', value: report.summary.pass, color: '#22c55e' },

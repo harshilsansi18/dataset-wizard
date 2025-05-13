@@ -48,6 +48,7 @@ const saveTemplatesToStorage = () => {
 const saveReportsToStorage = () => {
   try {
     localStorage.setItem(VALIDATION_REPORTS_STORAGE_KEY, JSON.stringify(reportsStore));
+    console.log("Saved reports to storage:", reportsStore.length);
   } catch (error) {
     console.error(`Error saving validation reports:`, error);
     toast({
@@ -221,6 +222,7 @@ export const getValidationReportById = (id: string): Promise<ValidationReport | 
   return new Promise((resolve) => {
     setTimeout(() => {
       const report = reportsStore.find(report => report.id === id);
+      console.log("Fetched report by ID:", id, "Found:", !!report);
       resolve(report);
     }, 300);
   });
@@ -230,6 +232,7 @@ export const getValidationReportsByDatasetId = (datasetId: string): Promise<Vali
   return new Promise((resolve) => {
     setTimeout(() => {
       const reports = reportsStore.filter(report => report.datasetId === datasetId);
+      console.log("Fetching reports for dataset:", datasetId, "Found:", reports.length);
       resolve(reports);
     }, 300);
   });
