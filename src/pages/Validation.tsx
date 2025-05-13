@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -301,6 +300,7 @@ const Validation = () => {
         const mockResults: ValidationResult[] = [
           {
             id: "1",
+            datasetId: selectedDataset, // Add the missing datasetId
             check: "Row count",
             status: "Pass",
             details: "Expected > 0, actual: 150",
@@ -309,6 +309,7 @@ const Validation = () => {
           },
           {
             id: "2",
+            datasetId: selectedDataset, // Add the missing datasetId
             check: "Missing values in required fields",
             status: "Fail",
             details: "Found 5 missing values in 'email' field",
@@ -317,6 +318,7 @@ const Validation = () => {
           },
           {
             id: "3",
+            datasetId: selectedDataset, // Add the missing datasetId
             check: "Date format check",
             status: "Warning",
             details: "3 dates not in YYYY-MM-DD format",
@@ -325,6 +327,7 @@ const Validation = () => {
           },
           {
             id: "4",
+            datasetId: selectedDataset, // Add the missing datasetId
             check: "Numeric range check",
             status: "Pass",
             details: "All 'age' values between 18 and 99",
@@ -333,6 +336,7 @@ const Validation = () => {
           },
           {
             id: "5",
+            datasetId: selectedDataset, // Add the missing datasetId
             check: "Email format validation",
             status: "Warning",
             details: "2 email addresses with invalid format",
