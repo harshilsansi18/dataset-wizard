@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import ValidationCharts from "./ValidationCharts";
 import ValidationIssuesList from "./ValidationIssuesList";
 import { ValidationMethods } from "@/services/api";
 import { generateValidationReport } from "@/services/reportService";
+import { useToast } from "@/hooks/use-toast";
 
 interface ValidationDashboardProps {
   dataset: DatasetType;
@@ -24,6 +26,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   isValidating
 }) => {
   const [activeTab, setActiveTab] = useState("overview");
+  const { toast } = useToast();
 
   // Count results by status
   const resultCounts = {
@@ -33,6 +36,36 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     info: validationResults.filter(r => r.status === "Info").length,
     total: validationResults.length
   };
+
+  // Generate report when results are available
+  useEffect(() => {
+    const generateReport = async () => {
+      if (validationResults.length > 0 && dataset) {
+        try {
+          console.log("Generating validation report for:", dataset.name, "with", validationResults.length, "results");
+          const report = await generateValidationReport(dataset.id, dataset.name, validationResults);
+          console.log("Generated validation report:", report);
+          
+          // Store report ID in session storage to highlight it on reports page
+          sessionStorage.setItem('highlightReportId', report.id);
+          
+          toast({
+            title: "Report Generated",
+            description: `Validation report for "${dataset.name}" has been created.`,
+          });
+        } catch (error) {
+          console.error("Error generating report:", error);
+          toast({
+            title: "Report Generation Failed",
+            description: "Could not generate the validation report. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    generateReport();
+  }, [validationResults, dataset]);
 
   // Create validation method cards
   const validationMethods = [

@@ -155,8 +155,17 @@ export const generateValidationReport = (
   return new Promise((resolve) => {
     setTimeout(() => {
       console.log("Generating validation report for:", datasetName, "with", results.length, "results");
+      
+      // Ensure all results have proper datasetId
+      const enhancedResults = results.map(result => {
+        if (!result.datasetId) {
+          return { ...result, datasetId };
+        }
+        return result;
+      });
+      
       // Add categories to results if they don't have one
-      const categorizedResults = results.map(result => {
+      const categorizedResults = enhancedResults.map(result => {
         if (!result.category) {
           // Extract category from check name or use default
           const words = result.check.split(' ');

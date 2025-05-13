@@ -53,6 +53,7 @@ const Validation = () => {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [sqlPreview, setSqlPreview] = useState<{valid: boolean, message: string, rows_affected?: string} | null>(null);
+  const [reportGenerated, setReportGenerated] = useState(false);
 
   useEffect(() => {
     fetchDatasets();
@@ -226,6 +227,7 @@ const Validation = () => {
 
     setIsRunning(true);
     setValidationResults([]);
+    setReportGenerated(false);
     
     const progressInterval = simulateValidationProgress();
 
@@ -246,25 +248,34 @@ const Validation = () => {
         throw new Error("No validation results were returned");
       }
       
-      setValidationResults(results);
+      // Ensure each result has a datasetId
+      const resultsWithDatasetId = results.map(result => {
+        if (!result.datasetId) {
+          return { ...result, datasetId: selectedDataset };
+        }
+        return result;
+      });
       
-      const passCount = results.filter(r => r.status === "Pass").length;
-      const warningCount = results.filter(r => r.status === "Warning").length;
-      const failCount = results.filter(r => r.status === "Fail").length;
+      setValidationResults(resultsWithDatasetId);
+      
+      const passCount = resultsWithDatasetId.filter(r => r.status === "Pass").length;
+      const warningCount = resultsWithDatasetId.filter(r => r.status === "Warning").length;
+      const failCount = resultsWithDatasetId.filter(r => r.status === "Fail").length;
       
       // Get the dataset name for the report
       const selectedDs = datasets.find(d => d.id === selectedDataset);
-      if (selectedDs && results.length > 0) {
+      if (selectedDs && resultsWithDatasetId.length > 0) {
         try {
           // Generate the report
           const report = await generateValidationReport(
             selectedDataset,
             selectedDs.name,
-            results
+            resultsWithDatasetId
           );
           
           // Add report ID to session storage to highlight it on reports page
           sessionStorage.setItem('highlightReportId', report.id);
+          setReportGenerated(true);
           
           console.log("Generated validation report:", report);
           
@@ -359,6 +370,7 @@ const Validation = () => {
             );
             
             sessionStorage.setItem('highlightReportId', report.id);
+            setReportGenerated(true);
             console.log("Generated sample validation report:", report);
             
             toast({
@@ -478,6 +490,78 @@ datasets:
         return <Terminal className="mr-2 h-5 w-5" />;
       default:
         return <Shield className="mr-2 h-5 w-5" />;
+    }
+  };
+
+  const renderValidationResults = () => {
+    if (isRunning) {
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Validation in progress...</span>
+              <span className="text-sm text-slate-500">{progress}%</span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+          
+          <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+            {logs.map((log, i) => (
+              <div key={i} className="py-1 pl-2 font-mono text-xs">
+                <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    } else if (validationResults.length === 0) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center">
+          <Shield className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+          <p className="text-lg font-medium">No validation results yet</p>
+          <p className="text-sm text-slate-500">
+            Select a dataset and run validation to see results
+          </p>
+        </div>
+      );
+    } else {
+      return (
+        <div className="space-y-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[50px]">Status</TableHead>
+                <TableHead className="w-[250px]">Check</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {validationResults.map((result) => (
+                <TableRow key={result.id}>
+                  <TableCell>
+                    <div className="flex justify-center">
+                      {getResultIcon(result.status)}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {result.check}
+                  </TableCell>
+                  <TableCell>{result.details}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          
+          {reportGenerated && (
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => navigate('/reports')}>
+                <FileText className="mr-2 h-4 w-4" />
+                View Full Report
+              </Button>
+            </div>
+          )}
+        </div>
+      );
     }
   };
 
@@ -613,7 +697,7 @@ datasets:
                     </div>
                     
                     <div className="rounded-md border p-3 bg-slate-50 dark:bg-slate-900 text-sm">
-                      <div className="flex items-center mb-2 text-blue-600">
+                      <div className="flex items-start mb-2 text-blue-600">
                         <img 
                           src="public/lovable-uploads/2d23d3c7-e2d1-49bb-9c8c-40c03fccf8e8.png" 
                           alt="FBDI Validation Checklist" 
@@ -800,60 +884,7 @@ datasets:
               <Separator />
             </CardHeader>
             <CardContent>
-              {isRunning ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Validation in progress...</span>
-                      <span className="text-sm text-slate-500">{progress}%</span>
-                    </div>
-                    <Progress value={progress} className="h-2" />
-                  </div>
-                  
-                  <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                    {logs.map((log, i) => (
-                      <div key={i} className="py-1 pl-2 font-mono text-xs">
-                        <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> {log}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : validationResults.length === 0 ? (
-                <div className="flex h-64 flex-col items-center justify-center">
-                  <Shield className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
-                  <p className="text-lg font-medium">No validation results yet</p>
-                  <p className="text-sm text-slate-500">
-                    Select a dataset and run validation to see results
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]">Status</TableHead>
-                        <TableHead className="w-[250px]">Check</TableHead>
-                        <TableHead>Details</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {validationResults.map((result) => (
-                        <TableRow key={result.id}>
-                          <TableCell>
-                            <div className="flex justify-center">
-                              {getResultIcon(result.status)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {result.check}
-                          </TableCell>
-                          <TableCell>{result.details}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+              {renderValidationResults()}
             </CardContent>
           </Card>
         </div>
