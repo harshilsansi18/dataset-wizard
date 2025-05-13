@@ -148,71 +148,324 @@ const Validation = () => {
     }
   }, [customSQL, validationMethod, selectedDataset]);
 
-  const simulateValidationProgress = () => {
-    setProgress(0);
-    setLogs([]);
+  // This function performs real validation on the dataset
+  const performRealValidation = (dataset: DatasetType): ValidationResult[] => {
+    const results: ValidationResult[] = [];
     
-    const stageTimeline = [
-      { progress: 10, log: "Connecting to validation engine..." },
-      { progress: 20, log: "Loading dataset schema..." },
-      { progress: 30, log: `Preparing ${validationMethod} validation checks...` },
-      { progress: 50, log: "Analyzing data content..." },
-      { progress: 70, log: "Running validation tests..." },
-      { progress: 90, log: "Finalizing results..." },
-    ];
+    // Get current timestamp for all validation results
+    const timestamp = new Date().toISOString();
     
-    if (["advanced", "format_checks", "value_lookup", "data_completeness", "data_quality"].includes(validationMethod)) {
-      stageTimeline.splice(3, 0, 
-        { progress: 40, log: "Checking for schema consistency..." }
-      );
+    // Only process if we have content
+    if (!dataset.content || !Array.isArray(dataset.content) || dataset.content.length === 0) {
+      results.push({
+        id: `val_${Date.now()}_0`,
+        datasetId: dataset.id,
+        timestamp,
+        check: "Dataset content",
+        status: "Fail",
+        details: "Dataset has no content to validate",
+        category: "Content"
+      });
+      return results;
     }
     
-    if (validationMethod === "custom" && customSQL) {
-      stageTimeline.splice(4, 0, 
-        { progress: 60, log: `Processing custom SQL: ${customSQL.substring(0, 30)}...` }
-      );
-    }
+    // Extract headers if available
+    const headers = dataset.headers || Object.keys(dataset.content[0]);
     
-    if (validationMethod === "format_checks") {
-      stageTimeline.splice(3, 0,
-        { progress: 45, log: "Validating name, date, email, and location formats..." }
-      );
-    }
+    // Row count check
+    results.push({
+      id: `val_${Date.now()}_1`,
+      datasetId: dataset.id,
+      timestamp,
+      check: "Row count",
+      status: dataset.content.length > 0 ? "Pass" : "Fail",
+      details: `Expected > 0, actual: ${dataset.content.length}`,
+      category: "Count"
+    });
     
-    if (validationMethod === "value_lookup") {
-      stageTimeline.splice(3, 0,
-        { progress: 45, log: "Checking value lists for gender and status fields..." }
-      );
-    }
+    // Column count check
+    results.push({
+      id: `val_${Date.now()}_2`,
+      datasetId: dataset.id,
+      timestamp,
+      check: "Column count",
+      status: headers.length > 0 ? "Pass" : "Fail",
+      details: `Expected > 0, actual: ${headers.length}`,
+      category: "Schema"
+    });
     
-    if (validationMethod === "data_completeness") {
-      stageTimeline.splice(3, 0,
-        { progress: 45, log: "Verifying row counts and checking for missing required fields..." }
-      );
-    }
-    
-    if (validationMethod === "data_quality") {
-      stageTimeline.splice(3, 0,
-        { progress: 45, log: "Analyzing date fields and numeric outliers..." }
-      );
-    }
-    
-    let currentStage = 0;
-    
-    const progressInterval = setInterval(() => {
-      if (currentStage < stageTimeline.length) {
-        const stage = stageTimeline[currentStage];
-        setProgress(stage.progress);
-        setLogs(prev => [...prev, stage.log]);
-        currentStage++;
+    // Check for missing values in each column
+    headers.forEach((header, idx) => {
+      const missingCount = dataset.content.filter(row => row[header] === null || row[header] === undefined || row[header] === "").length;
+      const missingPercentage = (missingCount / dataset.content.length) * 100;
+      
+      let status: "Pass" | "Fail" | "Warning" | "Info";
+      if (missingCount === 0) {
+        status = "Pass";
+      } else if (missingPercentage > 20) {
+        status = "Fail";
+      } else if (missingPercentage > 5) {
+        status = "Warning";
       } else {
-        setProgress(100);
-        setLogs(prev => [...prev, "Validation complete!"]);
-        clearInterval(progressInterval);
+        status = "Info";
       }
-    }, 500);
+      
+      results.push({
+        id: `val_${Date.now()}_${3 + idx}`,
+        datasetId: dataset.id,
+        timestamp,
+        check: `Missing values in '${header}'`,
+        status,
+        details: `Found ${missingCount} missing values (${missingPercentage.toFixed(1)}%)`,
+        category: "Completeness",
+        affectedColumns: [header]
+      });
+    });
     
-    return progressInterval;
+    // Additional validations for specific dataset types
+    const fileName = dataset.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isCSV = fileName.endsWith('.csv');
+    
+    // Perform format-specific validations
+    if (validationMethod === "format_checks" || validationMethod === "advanced") {
+      // Check email format in any column that might contain emails
+      const emailColumns = headers.filter(h => 
+        h.toLowerCase().includes('email') || 
+        h.toLowerCase().includes('mail') || 
+        h.toLowerCase() === 'e-mail'
+      );
+      
+      emailColumns.forEach(emailCol => {
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        const invalidEmails = dataset.content.filter(row => 
+          row[emailCol] && 
+          typeof row[emailCol] === 'string' && 
+          !emailRegex.test(row[emailCol])
+        );
+        
+        if (invalidEmails.length > 0) {
+          results.push({
+            id: `val_${Date.now()}_email_${emailCol}`,
+            datasetId: dataset.id,
+            timestamp,
+            check: `Email format in '${emailCol}'`,
+            status: invalidEmails.length > 5 ? "Fail" : "Warning",
+            details: `Found ${invalidEmails.length} invalid email addresses`,
+            category: "Format",
+            affectedColumns: [emailCol]
+          });
+        } else if (emailColumns.length > 0) {
+          results.push({
+            id: `val_${Date.now()}_email_valid`,
+            datasetId: dataset.id,
+            timestamp,
+            check: `Email format in '${emailCol}'`,
+            status: "Pass",
+            details: "All email addresses have valid format",
+            category: "Format",
+            affectedColumns: [emailCol]
+          });
+        }
+      });
+      
+      // Check date formats in date columns
+      const dateColumns = headers.filter(h => 
+        h.toLowerCase().includes('date') || 
+        h.toLowerCase().includes('time') ||
+        h.toLowerCase().includes('birth') ||
+        h.toLowerCase().includes('created') ||
+        h.toLowerCase().includes('updated')
+      );
+      
+      dateColumns.forEach(dateCol => {
+        let invalidDates = 0;
+        let validDateFormat = "";
+        
+        // Check for common date formats
+        dataset.content.forEach(row => {
+          if (row[dateCol]) {
+            const value = String(row[dateCol]);
+            // Check if it's a valid date in any format
+            const dateObj = new Date(value);
+            if (isNaN(dateObj.getTime())) {
+              invalidDates++;
+            } else if (!validDateFormat) {
+              // Store the first valid format we find
+              validDateFormat = value.includes('-') ? 'YYYY-MM-DD' : 
+                                value.includes('/') ? 'MM/DD/YYYY' : 
+                                'Unknown';
+            }
+          }
+        });
+        
+        if (invalidDates > 0) {
+          results.push({
+            id: `val_${Date.now()}_date_${dateCol}`,
+            datasetId: dataset.id,
+            timestamp,
+            check: `Date format in '${dateCol}'`,
+            status: invalidDates > 5 ? "Fail" : "Warning",
+            details: `Found ${invalidDates} invalid date values${validDateFormat ? `. Expected format: ${validDateFormat}` : ''}`,
+            category: "Format",
+            affectedColumns: [dateCol]
+          });
+        } else if (dateColumns.length > 0) {
+          results.push({
+            id: `val_${Date.now()}_date_valid`,
+            datasetId: dataset.id,
+            timestamp,
+            check: `Date format in '${dateCol}'`,
+            status: "Pass",
+            details: `All date values have valid format${validDateFormat ? ` (${validDateFormat})` : ''}`,
+            category: "Format",
+            affectedColumns: [dateCol]
+          });
+        }
+      });
+    }
+    
+    // Add checks for numeric fields if doing advanced validation
+    if (validationMethod === "data_quality" || validationMethod === "advanced") {
+      // Identify numeric columns by sampling data
+      const numericColumns = headers.filter(header => {
+        const sampleSize = Math.min(10, dataset.content.length);
+        let numericCount = 0;
+        
+        for (let i = 0; i < sampleSize; i++) {
+          const value = dataset.content[i][header];
+          if (typeof value === 'number' || (typeof value === 'string' && !isNaN(Number(value)))) {
+            numericCount++;
+          }
+        }
+        
+        // If more than 70% of samples are numeric, consider it a numeric column
+        return numericCount / sampleSize > 0.7;
+      });
+      
+      numericColumns.forEach(numCol => {
+        const values = dataset.content
+          .map(row => typeof row[numCol] === 'number' ? row[numCol] : Number(row[numCol]))
+          .filter(val => !isNaN(val));
+        
+        if (values.length > 0) {
+          const min = Math.min(...values);
+          const max = Math.max(...values);
+          const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+          
+          // Check for outliers (simple method: values more than 3 standard deviations from mean)
+          const stdDev = Math.sqrt(
+            values.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / values.length
+          );
+          
+          const outliers = values.filter(val => Math.abs(val - avg) > 3 * stdDev);
+          
+          if (outliers.length > 0) {
+            results.push({
+              id: `val_${Date.now()}_outlier_${numCol}`,
+              datasetId: dataset.id,
+              timestamp,
+              check: `Outlier detection in '${numCol}'`,
+              status: outliers.length > 5 ? "Warning" : "Info",
+              details: `Found ${outliers.length} outliers. Range: ${min} to ${max}, Avg: ${avg.toFixed(2)}`,
+              category: "Outliers",
+              affectedColumns: [numCol]
+            });
+          } else {
+            results.push({
+              id: `val_${Date.now()}_range_${numCol}`,
+              datasetId: dataset.id,
+              timestamp,
+              check: `Numeric range in '${numCol}'`,
+              status: "Pass",
+              details: `All values within expected range. Min: ${min}, Max: ${max}, Avg: ${avg.toFixed(2)}`,
+              category: "Range",
+              affectedColumns: [numCol]
+            });
+          }
+        }
+      });
+    }
+    
+    // FBDI specific validations for Excel/CSV files
+    if ((isExcel || isCSV) && (validationMethod === "basic" || validationMethod === "advanced")) {
+      // Check for duplicate headers
+      const headerSet = new Set<string>();
+      const duplicateHeaders: string[] = [];
+      
+      headers.forEach(header => {
+        if (headerSet.has(header)) {
+          duplicateHeaders.push(header);
+        } else {
+          headerSet.add(header);
+        }
+      });
+      
+      if (duplicateHeaders.length > 0) {
+        results.push({
+          id: `val_${Date.now()}_dup_headers`,
+          datasetId: dataset.id,
+          timestamp,
+          check: "Duplicate column headers",
+          status: "Fail",
+          details: `Found duplicate headers: ${duplicateHeaders.join(", ")}`,
+          category: "Schema",
+          affectedColumns: duplicateHeaders
+        });
+      } else {
+        results.push({
+          id: `val_${Date.now()}_unique_headers`,
+          datasetId: dataset.id,
+          timestamp,
+          check: "Unique column headers",
+          status: "Pass",
+          details: "All column headers are unique",
+          category: "Schema"
+        });
+      }
+      
+      // Check for required FBDI columns if format_checks or data_completeness is selected
+      if (validationMethod === "format_checks" || validationMethod === "data_completeness") {
+        // Common FBDI column patterns
+        const requiredPatterns = [
+          'SOURCE_SYSTEM',
+          'BATCH_ID',
+          'BUSINESS_UNIT',
+          'ID',
+          'NAME',
+          'CODE',
+          'STATUS'
+        ];
+        
+        const missingPatterns = requiredPatterns.filter(pattern => 
+          !headers.some(h => h.toUpperCase().includes(pattern))
+        );
+        
+        if (missingPatterns.length > 0) {
+          results.push({
+            id: `val_${Date.now()}_fbdi_cols`,
+            datasetId: dataset.id,
+            timestamp,
+            check: "FBDI required columns",
+            status: "Warning",
+            details: `Missing recommended columns containing: ${missingPatterns.join(", ")}`,
+            category: "FBDI"
+          });
+        } else {
+          results.push({
+            id: `val_${Date.now()}_fbdi_cols_ok`,
+            datasetId: dataset.id,
+            timestamp,
+            check: "FBDI required columns",
+            status: "Pass",
+            details: "All recommended FBDI columns present",
+            category: "FBDI"
+          });
+        }
+      }
+    }
+    
+    return results;
   };
 
   const handleRunValidation = async () => {
@@ -228,49 +481,43 @@ const Validation = () => {
     setIsRunning(true);
     setValidationResults([]);
     setReportGenerated(false);
+    setProgress(0);
+    setLogs([]);
     
-    const progressInterval = simulateValidationProgress();
-
+    // Add initial log
+    setLogs(prev => [...prev, "Starting real dataset validation..."]);
+    
     try {
-      // Actual validation call
-      const results = await runValidation(
-        selectedDataset, 
-        validationMethod, 
-        validationMethod === 'custom' ? customSQL : undefined
-      );
+      setProgress(10);
+      setLogs(prev => [...prev, "Loading dataset content..."]);
       
-      setProgress(100);
-      clearInterval(progressInterval);
-      
-      console.log("Received validation results:", results);
-      
-      if (!Array.isArray(results) || results.length === 0) {
-        throw new Error("No validation results were returned");
+      // Find the selected dataset
+      const selectedDs = datasets.find(d => d.id === selectedDataset);
+      if (!selectedDs) {
+        throw new Error("Selected dataset not found");
       }
       
-      // Ensure each result has a datasetId
-      const resultsWithDatasetId = results.map(result => {
-        if (!result.datasetId) {
-          return { ...result, datasetId: selectedDataset };
-        }
-        return result;
-      });
+      setProgress(30);
+      setLogs(prev => [...prev, `Analyzing ${selectedDs.name}...`]);
       
-      setValidationResults(resultsWithDatasetId);
+      // Perform real validation based on the dataset
+      const realResults = performRealValidation(selectedDs);
       
-      const passCount = resultsWithDatasetId.filter(r => r.status === "Pass").length;
-      const warningCount = resultsWithDatasetId.filter(r => r.status === "Warning").length;
-      const failCount = resultsWithDatasetId.filter(r => r.status === "Fail").length;
+      setProgress(70);
+      setLogs(prev => [...prev, `Found ${realResults.length} validation results`]);
       
-      // Get the dataset name for the report
-      const selectedDs = datasets.find(d => d.id === selectedDataset);
-      if (selectedDs && resultsWithDatasetId.length > 0) {
+      setValidationResults(realResults);
+      setProgress(90);
+      
+      if (selectedDs && realResults.length > 0) {
         try {
+          setLogs(prev => [...prev, "Generating validation report..."]);
+          
           // Generate the report
           const report = await generateValidationReport(
             selectedDataset,
             selectedDs.name,
-            resultsWithDatasetId
+            realResults
           );
           
           // Add report ID to session storage to highlight it on reports page
@@ -279,12 +526,18 @@ const Validation = () => {
           
           console.log("Generated validation report:", report);
           
+          setLogs(prev => [...prev, "Validation report generated successfully"]);
+          setProgress(100);
+          
           toast({
             title: "Validation complete",
-            description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures. Report generated.`,
+            description: `Validated ${selectedDs.name} with ${realResults.filter(r => r.status === "Pass").length} passes, ${realResults.filter(r => r.status === "Warning").length} warnings, and ${realResults.filter(r => r.status === "Fail").length} failures.`,
           });
         } catch (error) {
           console.error("Error generating report:", error);
+          setProgress(100);
+          setLogs(prev => [...prev, "Error generating report"]);
+          
           toast({
             title: "Report Generation Failed",
             description: "The validation ran successfully but there was an issue creating the report.",
@@ -292,102 +545,28 @@ const Validation = () => {
           });
         }
       } else {
+        setProgress(100);
+        setLogs(prev => [...prev, "Validation complete"]);
+        
         toast({
           title: "Validation complete",
-          description: `Completed with ${passCount} passes, ${warningCount} warnings, and ${failCount} failures.`,
+          description: realResults.length > 0 
+            ? `Completed with ${realResults.filter(r => r.status === "Pass").length} passes, ${realResults.filter(r => r.status === "Warning").length} warnings, and ${realResults.filter(r => r.status === "Fail").length} failures.`
+            : "No validation results were generated. Dataset may be empty.",
         });
       }
       
       fetchDatasets();
     } catch (error) {
       console.error("Validation error:", error);
-      clearInterval(progressInterval);
-      setProgress(0);
+      setProgress(100);
+      setLogs(prev => [...prev, "Validation failed with error"]);
       
-      // Just for demo purposes, generate some sample validation results
-      if (process.env.NODE_ENV === 'development' || true) {
-        console.log("Generating sample validation results for demonstration");
-        
-        const mockResults: ValidationResult[] = [
-          {
-            id: "1",
-            datasetId: selectedDataset, // Add the missing datasetId
-            check: "Row count",
-            status: "Pass",
-            details: "Expected > 0, actual: 150",
-            timestamp: new Date().toISOString(),
-            category: "Count"
-          },
-          {
-            id: "2",
-            datasetId: selectedDataset, // Add the missing datasetId
-            check: "Missing values in required fields",
-            status: "Fail",
-            details: "Found 5 missing values in 'email' field",
-            timestamp: new Date().toISOString(),
-            category: "Completeness"
-          },
-          {
-            id: "3",
-            datasetId: selectedDataset, // Add the missing datasetId
-            check: "Date format check",
-            status: "Warning",
-            details: "3 dates not in YYYY-MM-DD format",
-            timestamp: new Date().toISOString(),
-            category: "Format"
-          },
-          {
-            id: "4",
-            datasetId: selectedDataset, // Add the missing datasetId
-            check: "Numeric range check",
-            status: "Pass",
-            details: "All 'age' values between 18 and 99",
-            timestamp: new Date().toISOString(),
-            category: "Range"
-          },
-          {
-            id: "5",
-            datasetId: selectedDataset, // Add the missing datasetId
-            check: "Email format validation",
-            status: "Warning",
-            details: "2 email addresses with invalid format",
-            timestamp: new Date().toISOString(),
-            category: "Format"
-          }
-        ];
-        
-        setValidationResults(mockResults);
-        setProgress(100);
-        
-        const selectedDs = datasets.find(d => d.id === selectedDataset);
-        if (selectedDs) {
-          try {
-            // Generate the report from mock results
-            const report = await generateValidationReport(
-              selectedDataset,
-              selectedDs.name,
-              mockResults
-            );
-            
-            sessionStorage.setItem('highlightReportId', report.id);
-            setReportGenerated(true);
-            console.log("Generated sample validation report:", report);
-            
-            toast({
-              title: "Validation complete (demo mode)",
-              description: "Sample validation report generated for demonstration.",
-            });
-          } catch (demoError) {
-            console.error("Error generating demo report:", demoError);
-          }
-        }
-      } else {
-        toast({
-          title: "Validation Failed",
-          description: error instanceof Error ? error.message : "There was an error running the validation. Please try again.",
-          variant: "destructive"
-        });
-      }
+      toast({
+        title: "Validation Failed",
+        description: error instanceof Error ? error.message : "There was an error running the validation. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsRunning(false);
     }
@@ -670,227 +849,4 @@ datasets:
                               <ListFilter className="mr-2 h-4 w-4 text-blue-600" />
                               Value Lookup Checks
                             </span>
-                            <span className="ml-1 text-xs text-muted-foreground">(Gender, Civil Status)</span>
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="data_completeness" id="data_completeness" />
-                          <Label htmlFor="data_completeness" className="cursor-pointer flex items-start">
-                            <span className="flex items-center">
-                              <TableIcon className="mr-2 h-4 w-4 text-blue-600" />
-                              Data Completeness
-                            </span>
-                            <span className="ml-1 text-xs text-muted-foreground">(Row Count, Missing Values)</span>
-                          </Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="data_quality" id="data_quality" />
-                          <Label htmlFor="data_quality" className="cursor-pointer flex items-start">
-                            <span className="flex items-center">
-                              <AlertTriangle className="mr-2 h-4 w-4 text-blue-600" />
-                              Data Quality
-                            </span>
-                            <span className="ml-1 text-xs text-muted-foreground">(Dates, Numeric Fields)</span>
-                          </Label>
-                        </div>
-                      </RadioGroup>
-                    </div>
-                    
-                    <div className="rounded-md border p-3 bg-slate-50 dark:bg-slate-900 text-sm">
-                      <div className="flex items-start mb-2 text-blue-600">
-                        <img 
-                          src="public/lovable-uploads/2d23d3c7-e2d1-49bb-9c8c-40c03fccf8e8.png" 
-                          alt="FBDI Validation Checklist" 
-                          className="h-5 w-5 mr-2 rounded-sm" 
-                        />
-                        <span className="font-medium">FBDI File Validation Options</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Run different validation checks based on FBDI file validation requirements.
-                      </p>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                {validationMethod === "custom" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="custom-sql">Custom SQL Check</Label>
-                      <Textarea
-                        id="custom-sql"
-                        placeholder="SELECT COUNT(*) FROM table WHERE column IS NULL"
-                        value={customSQL}
-                        onChange={(e) => setCustomSQL(e.target.value)}
-                        className="min-h-[120px] font-mono text-sm"
-                      />
-                    </div>
-                    
-                    {sqlPreview && (
-                      <div className={`mt-2 rounded-md border p-3 text-sm ${sqlPreview.valid ? 'border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-900/20' : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-900/20'}`}>
-                        <div className="flex items-start">
-                          {sqlPreview.valid ? 
-                            <CheckCircle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-green-500" /> : 
-                            <AlertTriangle className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                          }
-                          <div>
-                            <p className="font-medium">{sqlPreview.valid ? 'SQL is valid' : 'SQL warning'}</p>
-                            <p>{sqlPreview.message}</p>
-                            {sqlPreview.rows_affected && (
-                              <p className="mt-1">
-                                <span className="flex items-center font-medium">
-                                  <TableIcon className="mr-1 h-3 w-3" />
-                                  Result will include:
-                                </span>
-                                {sqlPreview.rows_affected}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {validationMethod === "format_checks" && (
-                  <div className="rounded-md border p-3 bg-slate-50 dark:bg-slate-900 text-sm">
-                    <div className="flex items-start mb-2">
-                      <User className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Name fields</p>
-                        <p className="text-xs text-muted-foreground">Checks for proper case in first, last, and suffix fields</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start mb-2">
-                      <Mail className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Email fields</p>
-                        <p className="text-xs text-muted-foreground">Validates email format and case sensitivity</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start">
-                      <CalendarIcon className="h-4 w-4 mr-2 text-blue-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Date/time fields</p>
-                        <p className="text-xs text-muted-foreground">Checks for YYYY/MM/DD and HH:MM:SS formats</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <Button 
-                  className="w-full"
-                  onClick={handleRunValidation}
-                  disabled={isRunning || !selectedDataset}
-                >
-                  {isRunning ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Running Validation...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Run Validation
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Terminal className="mr-2 h-5 w-5 text-blue-600" />
-                Soda Core Configuration
-              </CardTitle>
-              <CardDescription>
-                Example YAML configuration
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="relative rounded-md bg-slate-950 p-4">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="absolute right-2 top-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(validationSnippet.trim());
-                    toast({
-                      title: "Copied to clipboard",
-                      description: "YAML configuration copied to clipboard",
-                    });
-                  }}
-                >
-                  <Copy className="h-4 w-4 text-slate-400 hover:text-slate-100" />
-                </Button>
-                <pre className="overflow-x-auto text-xs text-slate-100">
-                  <code>{validationSnippet}</code>
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="md:col-span-2">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center">
-                  {getValidationMethodIcon && getValidationMethodIcon()}
-                  Validation Results
-                </span>
-                <div className="flex items-center">
-                  {selectedDataset && datasets.find(d => d.id === selectedDataset) && (
-                    <span className="mr-4 text-base font-normal text-slate-500">
-                      {datasets.find(d => d.id === selectedDataset)?.name}
-                    </span>
-                  )}
-                  {validationDate && (
-                    <span className="flex items-center text-sm text-slate-400">
-                      <Calendar className="mr-1 h-4 w-4" />
-                      {validationDate.toLocaleDateString() + ' ' + validationDate.toLocaleTimeString()}
-                    </span>
-                  )}
-                </div>
-              </CardTitle>
-              {validationResults.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-y-2">
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <div className="flex items-center">
-                      <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
-                      <span>{validationResults.filter(r => r.status === "Pass").length} Passed</span>
-                    </div>
-                    <div className="flex items-center">
-                      <AlertTriangle className="mr-1 h-4 w-4 text-amber-500" />
-                      <span>{validationResults.filter(r => r.status === "Warning").length} Warnings</span>
-                    </div>
-                    <div className="flex items-center">
-                      <XCircle className="mr-1 h-4 w-4 text-red-500" />
-                      <span>{validationResults.filter(r => r.status === "Fail").length} Failed</span>
-                    </div>
-                  </div>
-                  
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => navigate('/reports')}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    View Detailed Report
-                  </Button>
-                </div>
-              )}
-              <Separator />
-            </CardHeader>
-            <CardContent>
-              {renderValidationResults()}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default Validation;
+                            <span className="ml-1
