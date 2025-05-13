@@ -2,7 +2,7 @@
 import { ValidationReport } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, AlertTriangle, Info, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, Info, RefreshCw, Trash2, FileSpreadsheet, FileCheck } from "lucide-react";
 import { format } from "date-fns";
 import { 
   AlertDialog,
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 
 interface ReportsListProps {
   reports: ValidationReport[];
@@ -85,6 +86,14 @@ const ReportsList = ({
     }
   };
 
+  const handleViewResults = (report: ValidationReport) => {
+    onSelectReport(report.id);
+    toast({
+      title: "Report loaded",
+      description: `Viewing validation results for "${report.datasetName}"`
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-2 p-4">
@@ -121,7 +130,7 @@ const ReportsList = ({
           className={`w-full px-4 py-2 flex justify-between items-center hover:bg-accent/50 focus:bg-accent/50 text-left ${
             selectedReportId === report.id ? "bg-accent" : ""
           } ${highlightedReport === report.id ? "ring-2 ring-primary animate-pulse" : ""}`}
-          onClick={() => onSelectReport(report.id)}
+          onClick={() => handleViewResults(report)}
         >
           <div className="flex items-center space-x-3 max-w-[85%]">
             <div 
@@ -139,6 +148,9 @@ const ReportsList = ({
               <div className="flex items-center">
                 <p className="text-sm font-medium truncate">{report.datasetName}</p>
                 {getFileTypeBadge(report.datasetName)}
+                {new Date(report.timestamp).getTime() > Date.now() - 300000 && (
+                  <Badge variant="outline" className="ml-2 bg-blue-50 text-blue-600 border-blue-200">New</Badge>
+                )}
               </div>
               <div className="flex items-center text-xs text-muted-foreground">
                 <span className="truncate">{format(new Date(report.timestamp), 'MMM d, yyyy h:mm a')}</span>
@@ -146,6 +158,12 @@ const ReportsList = ({
                 <span className="font-medium text-red-600">{report.summary.fail}</span>
                 <span className="mx-1">|</span>
                 <span className="font-medium text-amber-600">{report.summary.warning}</span>
+                {report.summary.pass > 0 && (
+                  <>
+                    <span className="mx-1">|</span>
+                    <span className="font-medium text-green-600">{report.summary.pass}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>

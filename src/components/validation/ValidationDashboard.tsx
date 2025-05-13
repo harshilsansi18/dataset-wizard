@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Check, X, Info, BarChart, FileText, Database, Search, FileSpreadsheet } from "lucide-react";
+import { AlertCircle, Check, X, Info, BarChart, FileText, Database, Search, FileSpreadsheet, FileCheck, CheckCircle } from "lucide-react";
 import { ValidationResult, DatasetType } from "@/services/types";
 import ValidationCharts from "./ValidationCharts";
 import ValidationIssuesList from "./ValidationIssuesList";
@@ -28,6 +28,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState("overview");
   const { toast } = useToast();
+  const [reportGenerated, setReportGenerated] = useState(false);
 
   // Count results by status
   const resultCounts = {
@@ -60,6 +61,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
           );
           
           console.log("Generated validation report:", report);
+          setReportGenerated(true);
           
           // Store report ID in session storage to highlight it on reports page
           sessionStorage.setItem('highlightReportId', report.id);
@@ -97,6 +99,14 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       icon: <Check className="h-5 w-5" />,
       color: "bg-green-50 text-green-700",
       recommended: true
+    },
+    {
+      id: ValidationMethods.SCHEMA_VALIDATION,
+      title: "Schema Validation",
+      description: "Validates file structure, headers, and column formats",
+      icon: <FileCheck className="h-5 w-5" />,
+      color: "bg-blue-50 text-blue-700",
+      recommended: isExcel || isCSV
     },
     {
       id: ValidationMethods.ADVANCED,
@@ -155,17 +165,23 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   // Add Excel/CSV specific validations
   if (isExcel || isCSV) {
     validationMethods.push({
-      id: ValidationMethods.SCHEMA_VALIDATION,
-      title: "Excel/CSV Structure",
-      description: "Validates spreadsheet structure, headers, and formatting",
+      id: ValidationMethods.CROSS_COLUMN,
+      title: "Cross-Column Analysis",
+      description: "Validates relationships between columns and detects inconsistencies",
       icon: <FileSpreadsheet className="h-5 w-5" />,
-      color: "bg-blue-50 text-blue-700",
+      color: "bg-indigo-50 text-indigo-700",
       recommended: true
     });
   }
 
   const handleRunValidation = (method: string) => {
     console.log("Running validation method:", method);
+    
+    // Clear any previous report info
+    setReportGenerated(false);
+    sessionStorage.removeItem('highlightReportId');
+    
+    // Actually run the validation
     onRunValidation(method);
   };
 
@@ -201,6 +217,12 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200">
               <FileText className="h-4 w-4 mr-1" />
               JSON Data
+            </Badge>
+          )}
+          {(isExcel || isCSV) && (
+            <Badge className="ml-2 bg-purple-100 text-purple-800 hover:bg-purple-200 border-purple-200">
+              <CheckCircle className="h-4 w-4 mr-1" />
+              FBDI Compatible
             </Badge>
           )}
         </div>
@@ -355,6 +377,15 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               <ValidationIssuesList results={validationResults} filterStatus="Info" />
             </TabsContent>
           </Tabs>
+          
+          {reportGenerated && (
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => window.location.href = '/reports'}>
+                <FileText className="mr-2 h-4 w-4" />
+                View Complete Report
+              </Button>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
