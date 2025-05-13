@@ -4,13 +4,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Check, X, Info, BarChart, FileText, Database, Search } from "lucide-react";
+import { AlertCircle, Check, X, Info, BarChart, FileText, Database, Search, FileSpreadsheet } from "lucide-react";
 import { ValidationResult, DatasetType } from "@/services/types";
 import ValidationCharts from "./ValidationCharts";
 import ValidationIssuesList from "./ValidationIssuesList";
 import { ValidationMethods } from "@/services/api";
 import { generateValidationReport } from "@/services/reportService";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 interface ValidationDashboardProps {
   dataset: DatasetType;
@@ -81,6 +82,12 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     generateReport();
   }, [validationResults, dataset, toast]);
 
+  // Determine dataset type for specialized validation methods
+  const isExcel = dataset?.name?.toLowerCase().endsWith('.xlsx') || 
+                 dataset?.name?.toLowerCase().endsWith('.xls');
+  const isCSV = dataset?.name?.toLowerCase().endsWith('.csv');
+  const isJSON = dataset?.name?.toLowerCase().endsWith('.json');
+
   // Create validation method cards
   const validationMethods = [
     {
@@ -88,21 +95,24 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       title: "Basic Validation",
       description: "Checks row count, column types, and data presence",
       icon: <Check className="h-5 w-5" />,
-      color: "bg-green-50 text-green-700"
+      color: "bg-green-50 text-green-700",
+      recommended: true
     },
     {
       id: ValidationMethods.ADVANCED,
       title: "Advanced Validation",
       description: "Checks for data consistency, patterns, and quality issues",
       icon: <AlertCircle className="h-5 w-5" />,
-      color: "bg-blue-50 text-blue-700"
+      color: "bg-blue-50 text-blue-700",
+      recommended: isExcel || isCSV
     },
     {
       id: ValidationMethods.FORMAT_CHECKS,
       title: "Format Checks",
       description: "Validates formatting of dates, emails, names, and more",
       icon: <FileText className="h-5 w-5" />,
-      color: "bg-purple-50 text-purple-700"
+      color: "bg-purple-50 text-purple-700",
+      recommended: isExcel || isCSV
     },
     {
       id: ValidationMethods.VALUE_LOOKUP,
@@ -116,7 +126,8 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       title: "Data Completeness",
       description: "Checks for missing values and data gaps",
       icon: <Database className="h-5 w-5" />,
-      color: "bg-indigo-50 text-indigo-700"
+      color: "bg-indigo-50 text-indigo-700",
+      recommended: isExcel || isCSV
     },
     {
       id: ValidationMethods.DATA_QUALITY,
@@ -141,6 +152,18 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     }
   ];
 
+  // Add Excel/CSV specific validations
+  if (isExcel || isCSV) {
+    validationMethods.push({
+      id: ValidationMethods.SCHEMA_VALIDATION,
+      title: "Excel/CSV Structure",
+      description: "Validates spreadsheet structure, headers, and formatting",
+      icon: <FileSpreadsheet className="h-5 w-5" />,
+      color: "bg-blue-50 text-blue-700",
+      recommended: true
+    });
+  }
+
   const handleRunValidation = (method: string) => {
     console.log("Running validation method:", method);
     onRunValidation(method);
@@ -159,6 +182,30 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Dataset Type Indicator */}
+      {dataset && (
+        <div className="flex items-center">
+          {isExcel && (
+            <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200">
+              <FileSpreadsheet className="h-4 w-4 mr-1" />
+              Excel Spreadsheet
+            </Badge>
+          )}
+          {isCSV && (
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-200 border-green-200">
+              <FileText className="h-4 w-4 mr-1" />
+              CSV File
+            </Badge>
+          )}
+          {isJSON && (
+            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200">
+              <FileText className="h-4 w-4 mr-1" />
+              JSON Data
+            </Badge>
+          )}
+        </div>
+      )}
+    
       {/* Summary Alert */}
       {validationResults.length > 0 && (
         <Alert variant={getAlertVariant()}>
@@ -244,11 +291,18 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
         <TabsContent value="methods" className="space-y-6 pt-3">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {validationMethods.map((method) => (
-              <Card key={method.id} className="overflow-hidden">
+              <Card key={method.id} className={`overflow-hidden ${method.recommended ? 'ring-2 ring-blue-400' : ''}`}>
                 <CardHeader className={method.color}>
-                  <div className="flex items-center gap-2">
-                    {method.icon}
-                    <CardTitle className="text-base">{method.title}</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {method.icon}
+                      <CardTitle className="text-base">{method.title}</CardTitle>
+                    </div>
+                    {method.recommended && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                        Recommended
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4">
@@ -260,7 +314,7 @@ const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                   <Button 
                     onClick={() => handleRunValidation(method.id)} 
                     disabled={isValidating} 
-                    variant="secondary"
+                    variant={method.recommended ? "default" : "secondary"}
                     className="w-full"
                   >
                     {isValidating ? "Running..." : "Run Validation"}

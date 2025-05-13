@@ -2,7 +2,7 @@
 import { ValidationReport } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, AlertTriangle, Info, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, Info, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 import { 
   AlertDialog,
@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useState, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
 
 interface ReportsListProps {
   reports: ValidationReport[];
@@ -59,6 +60,22 @@ const ReportsList = ({
     } else {
       return <CheckCircle className="h-4 w-4 text-green-500" />;
     }
+  };
+
+  // Get file type badge based on dataset name
+  const getFileTypeBadge = (datasetName: string) => {
+    const lowerName = datasetName.toLowerCase();
+    if (lowerName.endsWith('.csv')) {
+      return <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">CSV</Badge>;
+    } else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      return <Badge variant="outline" className="ml-2 bg-blue-50 text-blue-700 border-blue-200">
+        <FileSpreadsheet className="h-3 w-3 mr-1" />
+        Excel
+      </Badge>;
+    } else if (lowerName.endsWith('.json')) {
+      return <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-700 border-amber-200">JSON</Badge>;
+    }
+    return null;
   };
 
   const handleDeleteConfirm = () => {
@@ -119,10 +136,17 @@ const ReportsList = ({
               {getStatusIcon(report)}
             </div>
             <div className="min-w-0 truncate">
-              <p className="text-sm font-medium truncate">{report.datasetName}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {format(new Date(report.timestamp), 'MMM d, yyyy h:mm a')}
-              </p>
+              <div className="flex items-center">
+                <p className="text-sm font-medium truncate">{report.datasetName}</p>
+                {getFileTypeBadge(report.datasetName)}
+              </div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                <span className="truncate">{format(new Date(report.timestamp), 'MMM d, yyyy h:mm a')}</span>
+                <span className="mx-2">•</span>
+                <span className="font-medium text-red-600">{report.summary.fail}</span>
+                <span className="mx-1">|</span>
+                <span className="font-medium text-amber-600">{report.summary.warning}</span>
+              </div>
             </div>
           </div>
           
