@@ -28,6 +28,7 @@ import {
 import { getDatasets, runValidation, ValidationMethods, generateValidationReport, getValidationReports } from "@/services/api";
 import { useChatbot } from '@/contexts/ChatbotContext';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 type Message = {
   id: string;
@@ -693,15 +694,19 @@ A report has been generated. Would you like to view it?`,
                       msg.role === "user" ? "flex-row-reverse" : ""
                     }`}
                   >
-                    <Avatar className={`h-8 w-8 ${msg.role === "user" ? "bg-primary" : "bg-muted"} shadow-sm`}>
+                    <Avatar className={cn(
+                      "h-8 w-8 shadow-sm",
+                      msg.role === "user" ? "bg-primary" : "bg-muted"
+                    )}>
                       {msg.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                     </Avatar>
                     <div className="space-y-2 max-w-[calc(100%-36px)]">
-                      <Card className={`${
+                      <Card className={cn(
+                        "p-3 shadow-sm",
                         msg.role === "user" 
                           ? "bg-primary text-primary-foreground border-primary/10" 
                           : "bg-muted border-muted/10"
-                      } p-3 shadow-sm`}>
+                      )}>
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         
                         {/* Feedback buttons - only show for assistant messages */}
@@ -784,48 +789,6 @@ A report has been generated. Would you like to view it?`,
                   </div>
                 </div>
               ))}
-              
-              {/* Validation suggestions */}
-              {suggestions.length > 0 && (
-                <div className="mt-4 animate-fade-in">
-                  <p className="text-sm text-muted-foreground mb-2 font-medium flex items-center">
-                    <Lightbulb className="h-3.5 w-3.5 mr-1.5 text-primary" />
-                    Suggested actions:
-                  </p>
-                  <div className="space-y-2">
-                    {suggestions.map((suggestion, index) => (
-                      <Button
-                        key={index}
-                        variant="outline"
-                        className="w-full justify-start text-left h-auto py-2.5 bg-background/80 border-primary/10 hover:bg-primary/5 transition-colors hover:border-primary/30"
-                        onClick={() => handleRunValidation(suggestion)}
-                        disabled={isProcessing}
-                      >
-                        <div className="mr-2 bg-primary/10 p-1.5 rounded">
-                          {suggestion.method === "upload" ? (
-                            <Upload className="h-4 w-4 text-primary" />
-                          ) : suggestion.method === "navigate" ? (
-                            <ArrowUpRight className="h-4 w-4 text-primary" />
-                          ) : suggestion.method === ValidationMethods.BASIC ? (
-                            <Check className="h-4 w-4 text-primary" />
-                          ) : suggestion.method === ValidationMethods.DATA_COMPLETENESS ? (
-                            <Database className="h-4 w-4 text-primary" />
-                          ) : (
-                            <AlertTriangle className="h-4 w-4 text-primary" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{suggestion.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {suggestion.datasetName}
-                          </p>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
               
               {/* Processing indicator */}
               {isProcessing && (

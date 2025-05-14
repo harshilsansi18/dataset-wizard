@@ -20,6 +20,7 @@ import { MessageSquare, Bot, User, Send, FileText, BarChart, Calendar, ArrowUpRi
 import { getValidationReports, ValidationReport } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type Message = {
   id: string;
@@ -304,56 +305,60 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           <Button 
             variant="outline" 
             size="icon" 
-            className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg border-primary/20 bg-background/80 backdrop-blur-sm hover:bg-primary/10"
+            className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg border-primary/20 bg-primary/10 backdrop-blur-sm hover:bg-primary/20 transition-all duration-300 animate-fade-in"
           >
-            <MessageSquare className="h-6 w-6" />
+            <MessageSquare className="h-6 w-6 text-primary" />
           </Button>
         </SheetTrigger>
         <SheetContent className="sm:max-w-[400px] p-0 flex flex-col h-full border-l shadow-lg">
-          <SheetHeader className="px-4 py-3 border-b">
+          <SheetHeader className="px-4 py-3 border-b bg-gradient-to-r from-primary/10 to-transparent">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center">
-                <Bot className="h-5 w-5 mr-2 text-primary" />
-                <SheetTitle>Report Assistant</SheetTitle>
+                <Avatar className="h-8 w-8 mr-2 bg-primary/20">
+                  <Bot className="h-5 w-5 text-primary" />
+                </Avatar>
+                <div>
+                  <SheetTitle>Report Assistant</SheetTitle>
+                  <SheetDescription className="text-xs mt-0">
+                    Chat about reports and data validation results
+                  </SheetDescription>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button 
                   variant="ghost" 
                   size="icon" 
                   onClick={fetchReports} 
-                  className="h-8 w-8" 
+                  className="h-8 w-8 rounded-full" 
                   disabled={isLoadingReports}
                 >
                   <RefreshCw className={`h-4 w-4 ${isLoadingReports ? 'animate-spin' : ''}`} />
                 </Button>
-                <Badge variant="outline" className="bg-primary/10">
+                <Badge variant="outline" className="bg-primary/10 text-primary">
                   {reports.length} Reports
                 </Badge>
               </div>
             </div>
-            <SheetDescription className="text-xs mt-1">
-              Chat about reports and data validation results
-            </SheetDescription>
             
             {/* Search bar */}
-            <div className="mt-2 relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <div className="mt-3 relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <input 
                 type="text"
                 placeholder="Search reports..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full pl-9 h-9 rounded-md border border-input bg-background/80 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
           </SheetHeader>
           
-          <ScrollArea className="flex-1 p-4">
+          <ScrollArea className="flex-1 p-4 bg-gradient-to-b from-background to-muted/30">
             <div className="space-y-4">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex ${
+                  className={`flex animate-fade-in ${
                     msg.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
@@ -362,15 +367,16 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                       msg.role === "user" ? "flex-row-reverse" : ""
                     }`}
                   >
-                    <Avatar className={`h-8 w-8 ${msg.role === "user" ? "bg-primary" : "bg-muted"}`}>
-                      {msg.role === "user" ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
+                    <Avatar className={`h-8 w-8 ${msg.role === "user" ? "bg-primary" : "bg-muted"} shadow-sm`}>
+                      {msg.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                     </Avatar>
-                    <div className="space-y-2">
-                      <Card className={`${
+                    <div className="space-y-2 max-w-[calc(100%-36px)]">
+                      <Card className={cn(
+                        "p-3 shadow-sm",
                         msg.role === "user" 
-                          ? "bg-primary text-primary-foreground" 
-                          : "bg-muted"
-                      } p-3 shadow-sm`}>
+                          ? "bg-primary text-primary-foreground border-primary/10" 
+                          : "bg-muted border-muted/10"
+                      )}>
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         
                         {/* Feedback buttons - only show for assistant messages */}
@@ -404,7 +410,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                               key={index} 
                               variant="outline" 
                               size="sm" 
-                              className="text-xs py-1 h-auto bg-background shadow-sm hover:bg-accent"
+                              className="text-xs py-1 h-auto bg-background/80 shadow-sm border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors"
                               onClick={() => handleSuggestionClick(suggestion)}
                             >
                               {suggestion}
@@ -415,24 +421,27 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                       
                       {/* Report preview card */}
                       {msg.reportPreview && (
-                        <Card className="mt-2 overflow-hidden border shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleViewReport(msg.reportPreview!)}>
+                        <Card 
+                          className="mt-2 overflow-hidden border border-primary/20 shadow-sm hover:shadow-md transition-shadow cursor-pointer bg-card/90 hover:bg-card" 
+                          onClick={() => handleViewReport(msg.reportPreview!)}
+                        >
                           <div className="p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="text-sm font-medium truncate">{msg.reportPreview.datasetName}</div>
-                              <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="text-sm font-medium truncate text-primary">{msg.reportPreview.datasetName}</div>
+                              <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
                               <Calendar className="h-3 w-3" />
                               <span>{format(new Date(msg.reportPreview.timestamp), 'MMM d, yyyy')}</span>
                             </div>
-                            <div className="flex gap-2 mt-2">
-                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs">
+                            <div className="flex gap-2 mt-1.5">
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs dark:bg-green-950 dark:text-green-400 dark:border-green-800">
                                 {msg.reportPreview.summary.pass} Pass
                               </Badge>
-                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-xs">
+                              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs dark:bg-red-950 dark:text-red-400 dark:border-red-800">
                                 {msg.reportPreview.summary.fail} Fail
                               </Badge>
-                              <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-200 text-xs">
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">
                                 {msg.reportPreview.summary.warning} Warning
                               </Badge>
                             </div>
@@ -453,15 +462,15 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
               
               {/* Processing indicator */}
               {isProcessing && (
-                <div className="flex justify-start">
+                <div className="flex justify-start animate-fade-in">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 bg-muted">
-                      <Bot className="h-5 w-5" />
+                      <Bot className="h-4 w-4" />
                     </Avatar>
                     <div className="bg-muted rounded-lg px-4 py-2 flex items-center space-x-2">
-                      <div className="w-2 h-2 rounded-full bg-foreground/70 animate-bounce"></div>
-                      <div className="w-2 h-2 rounded-full bg-foreground/70 animate-bounce delay-75"></div>
-                      <div className="w-2 h-2 rounded-full bg-foreground/70 animate-bounce delay-150"></div>
+                      <div className="w-2 h-2 rounded-full bg-primary/70 animate-bounce"></div>
+                      <div className="w-2 h-2 rounded-full bg-primary/70 animate-bounce delay-75"></div>
+                      <div className="w-2 h-2 rounded-full bg-primary/70 animate-bounce delay-150"></div>
                     </div>
                   </div>
                 </div>
@@ -474,7 +483,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           
           {/* Help tips section */}
           {messages.length <= 2 && (
-            <div className="px-4 py-2 border-t border-dashed border-muted">
+            <div className="px-4 py-2 border-t border-dashed border-muted bg-muted/30">
               <div className="flex items-center mb-2 text-sm font-medium text-muted-foreground">
                 <Lightbulb className="h-4 w-4 mr-1.5 text-amber-500" />
                 <span>Try asking:</span>
@@ -485,10 +494,10 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                     key={i} 
                     variant="ghost" 
                     size="sm" 
-                    className="justify-start text-xs h-auto py-1.5 px-2" 
+                    className="justify-start text-xs h-auto py-1.5 px-2 hover:bg-primary/10 hover:text-primary transition-colors" 
                     onClick={() => handleSuggestionClick(tip)}
                   >
-                    <ChevronRight className="h-3 w-3 mr-1 text-muted-foreground" />
+                    <ChevronRight className="h-3 w-3 mr-1 text-primary" />
                     {tip}
                   </Button>
                 ))}
@@ -496,7 +505,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
             </div>
           )}
           
-          <div className="p-4 border-t">
+          <div className="p-4 border-t bg-gradient-to-b from-muted/10 to-background">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -506,7 +515,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
             >
               <Textarea
                 placeholder="Ask about reports or validation results..."
-                className="min-h-[60px] max-h-[120px] resize-none"
+                className="min-h-[60px] max-h-[120px] resize-none bg-muted/50 border-primary/20 focus-visible:ring-primary/30"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
@@ -515,7 +524,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
               <Button
                 type="submit"
                 size="icon"
-                className="h-[60px] shrink-0"
+                className="h-[60px] shrink-0 bg-primary/90 hover:bg-primary transition-colors"
                 disabled={isProcessing || !inputValue.trim()}
               >
                 <Send className="h-5 w-5" />
@@ -526,7 +535,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="text-xs text-muted-foreground flex items-center"
+                className="text-xs text-muted-foreground flex items-center hover:text-primary hover:bg-primary/10 transition-colors"
                 onClick={() => handleSuggestionClick("Help me understand these reports")}
               >
                 <HelpCircle className="h-3 w-3 mr-1" />
