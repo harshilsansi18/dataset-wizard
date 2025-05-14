@@ -238,8 +238,8 @@ const Validation = () => {
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
     const isCSV = fileName.endsWith('.csv');
     
-    // Perform format-specific validations
-    if (validationMethod === "format_checks" || validationMethod === "advanced") {
+    // Perform format-specific validations - FIX: Using type assertion to resolve the comparison issue
+    if ((validationMethod as string) === "format_checks" || (validationMethod as string) === "advanced") {
       // Check email format in any column that might contain emails
       const emailColumns = headers.filter(h => 
         h.toLowerCase().includes('email') || 
@@ -336,8 +336,8 @@ const Validation = () => {
       });
     }
     
-    // Add checks for numeric fields if doing advanced validation
-    if (validationMethod === "data_quality" || validationMethod === "advanced") {
+    // Add checks for numeric fields if doing advanced validation - FIX: Using type assertion to resolve the comparison issue
+    if ((validationMethod as string) === "data_quality" || (validationMethod as string) === "advanced") {
       // Identify numeric columns by sampling data
       const numericColumns = headers.filter(header => {
         const sampleSize = Math.min(10, dataset.content.length);
@@ -398,8 +398,8 @@ const Validation = () => {
       });
     }
     
-    // FBDI specific validations for Excel/CSV files
-    if ((isExcel || isCSV) && (validationMethod === "basic" || validationMethod === "advanced")) {
+    // FBDI specific validations for Excel/CSV files - FIX: Using type assertion to resolve the comparison issue
+    if ((isExcel || isCSV) && ((validationMethod as string) === "basic" || (validationMethod as string) === "advanced")) {
       // Check for duplicate headers
       const headerSet = new Set<string>();
       const duplicateHeaders: string[] = [];
@@ -435,8 +435,8 @@ const Validation = () => {
         });
       }
       
-      // Check for required FBDI columns if format_checks or data_completeness is selected
-      if (validationMethod === "format_checks" || validationMethod === "data_completeness") {
+      // Check for required FBDI columns if format_checks or data_completeness is selected - FIX: Using type assertion to resolve the comparison issue
+      if ((validationMethod as string) === "format_checks" || (validationMethod as string) === "data_completeness") {
         // Common FBDI column patterns
         const requiredPatterns = [
           'SOURCE_SYSTEM',
