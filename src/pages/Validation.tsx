@@ -609,40 +609,40 @@ const Validation = () => {
   };
 
   const validationSnippet = `
-# Example Soda Core validation YAML
-profile: postgres
-datasets:
-  ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
-    checks:
-      - row_count > 0
-      - missing_count(customer_id) = 0${validationMethod === 'advanced' ? `
-      - invalid_percent(email) < 5
-      - duplicate_count(id) = 0
-      - avg_length(description) > 10
-      - schema:
-          name: string
-          age: integer
-          email: string` : ''}${validationMethod === 'custom' ? `
-      - sql:
-          query: ${customSQL.replace(/\n/g, '\n          ')}
-          metrics:
-            - row_count
-          tests:
-            - row_count > 0` : ''}${validationMethod === 'format_checks' ? `
-      - values in [name, first_name, last_name] match regex "[A-Z].*"
-      - values in [email] match regex "^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$"
-      - values in [birth_date] match regex "^\\d{4}[/\\-]\\d{1,2}[/\\-]\\d{1,2}$"` : ''}${validationMethod === 'value_lookup' ? `
-      - values in [gender] in ("F", "M")
-      - values in [civil_status] in ("S", "M")` : ''}${validationMethod === 'data_completeness' ? `
-      - row_count > 0
-      - missing_count(id) = 0
-      - missing_percent(name) < 1
-      - duplicate_count(id) = 0` : ''}${validationMethod === 'data_quality' ? `
-      - min(birth_date) > date("1900-01-01")
-      - max(birth_date) < today()
-      - avg(age) between 18 and 100
-      - stddev(salary) < 50000` : ''}
-`;
+    // Example Soda Core validation YAML
+    profile: postgres
+    datasets:
+      ${selectedDataset ? datasets.find(d => d.id === selectedDataset)?.name || 'your_dataset' : 'your_dataset'}:
+        checks:
+          - row_count > 0
+          - missing_count(customer_id) = 0${validationMethod === 'advanced' ? `
+          - invalid_percent(email) < 5
+          - duplicate_count(id) = 0
+          - avg_length(description) > 10
+          - schema:
+              name: string
+              age: integer
+              email: string` : ''}${validationMethod === 'custom' ? `
+          - sql:
+              query: ${customSQL.replace(/\n/g, '\n          ')}
+              metrics:
+                - row_count
+              tests:
+                - row_count > 0` : ''}${validationMethod === 'format_checks' ? `
+          - values in [name, first_name, last_name] match regex "[A-Z].*"
+          - values in [email] match regex "^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
+          - values in [birth_date] match regex "^\\d{4}[/\\-]\\d{1,2}[/\\-]\\d{1,2}$"` : ''}${validationMethod === 'value_lookup' ? `
+          - values in [gender] in ("F", "M")
+          - values in [civil_status] in ("S", "M")` : ''}${validationMethod === 'data_completeness' ? `
+          - row_count > 0
+          - missing_count(id) = 0
+          - missing_percent(name) < 1
+          - duplicate_count(id) = 0` : ''}${validationMethod === 'data_quality' ? `
+          - min(birth_date) > date("1900-01-01")
+          - max(birth_date) < today()
+          - avg(age) between 18 and 100
+          - stddev(salary) < 50000` : ''}
+  `;
 
   const validationDate = validationResults.length > 0 
     ? new Date(validationResults[0].timestamp)
