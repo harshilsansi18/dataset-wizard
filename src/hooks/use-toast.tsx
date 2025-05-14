@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   toast as sonnerToast,
   Toaster as SonnerToaster,
+  Toast as SonnerToast,
 } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
@@ -76,7 +77,8 @@ export function toast({
       ? {
           label: action.title || "Action",
           onClick: action.onClick,
-          href: action.href,
+          // Only add href if it exists in the action
+          ...(action.href ? { href: action.href } : {})
         }
       : undefined,
     classNames: {
@@ -87,8 +89,12 @@ export function toast({
 }
 
 export const useToast = () => {
+  // Mock the toasts array expected by the Toaster component
+  const toasts: any[] = [];
+  
   return {
     toast,
+    toasts, // Add the toasts property expected by the Toaster component
     dismiss: sonnerToast.dismiss,
     error: (title: string, description?: string) =>
       toast({ title, description, variant: "destructive" }),
