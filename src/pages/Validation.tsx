@@ -41,11 +41,21 @@ import { motion } from "framer-motion";
 import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets, API_URL } from "@/services/api";
 import { generateValidationReport } from "@/services/reportService";
 
+// Define a proper type for validation method to avoid type mismatches
+type ValidationMethodType = 
+  | "basic" 
+  | "advanced" 
+  | "custom" 
+  | "format_checks" 
+  | "value_lookup" 
+  | "data_completeness" 
+  | "data_quality";
+
 const Validation = () => {
   const navigate = useNavigate();
   const [isRunning, setIsRunning] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
-  const [validationMethod, setValidationMethod] = useState("basic");
+  const [validationMethod, setValidationMethod] = useState<ValidationMethodType>("basic");
   const [customSQL, setCustomSQL] = useState("SELECT * FROM table WHERE column IS NULL");
   const [validationResults, setValidationResults] = useState<ValidationResult[]>([]);
   const [datasets, setDatasets] = useState<DatasetType[]>([]);
@@ -788,7 +798,7 @@ datasets:
                   </select>
                 </div>
 
-                <Tabs defaultValue="basic" onValueChange={(value) => setValidationMethod(value)}>
+                <Tabs defaultValue="basic" onValueChange={(value: string) => setValidationMethod(value as ValidationMethodType)}>
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="basic">Basic Options</TabsTrigger>
                     <TabsTrigger value="extended">Extended Options</TabsTrigger>
@@ -799,7 +809,7 @@ datasets:
                       <Label>Validation Method</Label>
                       <RadioGroup 
                         value={validationMethod} 
-                        onValueChange={setValidationMethod}
+                        onValueChange={(value: string) => setValidationMethod(value as ValidationMethodType)}
                         className="flex flex-col space-y-1"
                       >
                         <div className="flex items-center space-x-2">
@@ -829,7 +839,7 @@ datasets:
                       <Label>FBDI File Validation</Label>
                       <RadioGroup 
                         value={validationMethod} 
-                        onValueChange={setValidationMethod}
+                        onValueChange={(value: string) => setValidationMethod(value as ValidationMethodType)}
                         className="flex flex-col space-y-1"
                       >
                         <div className="flex items-center space-x-2">
