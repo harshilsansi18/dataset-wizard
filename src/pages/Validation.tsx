@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -36,12 +37,12 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { getDatasets, runValidation, DatasetType, ValidationResult, refreshImportedDatasets, API_URL } from "@/services/api";
 import { generateValidationReport } from "@/services/reportService";
 
-// Define a proper type for validation method to avoid type mismatches
+// Define a proper type for validation method to include all possible values
 type ValidationMethodType = 
   | "basic" 
   | "advanced" 
