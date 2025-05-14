@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -849,4 +849,113 @@ datasets:
                               <ListFilter className="mr-2 h-4 w-4 text-blue-600" />
                               Value Lookup Checks
                             </span>
-                            <span className="ml-1
+                            <span className="ml-1 text-xs text-muted-foreground">(Gender, Status, Types)</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="data_completeness" id="data_completeness" />
+                          <Label htmlFor="data_completeness" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <TableIcon className="mr-2 h-4 w-4 text-blue-600" />
+                              Data Completeness
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Missing values, Nulls)</span>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="data_quality" id="data_quality" />
+                          <Label htmlFor="data_quality" className="cursor-pointer flex items-start">
+                            <span className="flex items-center">
+                              <CheckCircle className="mr-2 h-4 w-4 text-blue-600" />
+                              Data Quality
+                            </span>
+                            <span className="ml-1 text-xs text-muted-foreground">(Ranges, Outliers, Patterns)</span>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                
+                {validationMethod === "custom" && (
+                  <div className="space-y-2 pt-4">
+                    <Label htmlFor="custom-sql">Custom SQL Validation</Label>
+                    <Textarea 
+                      id="custom-sql"
+                      value={customSQL}
+                      onChange={(e) => setCustomSQL(e.target.value)}
+                      placeholder="Enter SQL query for validation"
+                      className="min-h-32 font-mono"
+                    />
+                    
+                    {sqlPreview && (
+                      <div className={`mt-2 rounded-md p-3 text-sm ${
+                        sqlPreview.valid 
+                          ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300" 
+                          : "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300"
+                      }`}>
+                        <p className="font-medium">
+                          {sqlPreview.valid ? "Valid SQL" : "Invalid SQL"}
+                        </p>
+                        <p className="mt-1">{sqlPreview.message}</p>
+                        {sqlPreview.rows_affected && (
+                          <p className="mt-1">Rows affected: {sqlPreview.rows_affected}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="pt-4">
+                  <Button 
+                    onClick={handleRunValidation} 
+                    disabled={isRunning || !selectedDataset} 
+                    className="w-full"
+                  >
+                    {isRunning ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Running Validation...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Run Validation
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        
+        <div className="md:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Shield className="mr-2 h-5 w-5 text-blue-600" />
+                Validation Results
+              </CardTitle>
+              <CardDescription>
+                {validationResults.length > 0
+                  ? `${validationResults.length} validation checks performed`
+                  : "Run a validation to see results"}
+                {validationDate && (
+                  <span className="ml-1">
+                    on {validationDate.toLocaleDateString()} at {validationDate.toLocaleTimeString()}
+                  </span>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {renderValidationResults()}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Validation;
