@@ -3,7 +3,6 @@ import * as React from "react";
 import {
   toast as sonnerToast,
   Toaster as SonnerToaster,
-  Toast as SonnerToast,
 } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
