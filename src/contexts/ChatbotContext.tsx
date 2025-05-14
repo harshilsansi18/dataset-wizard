@@ -28,10 +28,12 @@ export const ChatbotProvider = ({ children }: ChatbotProviderProps) => {
   const [pageContext, setPageContext] = useState<string | null>(null);
 
   const addPageSpecificMessage = (message: string) => {
-    // This function will be used to add page-specific messages to the chatbot
-    // For now, we'll just set the page context
+    // Set the page context
     setPageContext(message);
-    // You can extend this to directly send messages to the chatbot
+    // Open the chatbot with the new context if needed
+    if (!isOpen) {
+      setIsOpen(true);
+    }
   };
 
   return (
