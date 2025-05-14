@@ -1,6 +1,4 @@
 
-import { useToast as useHookToast } from "@/components/ui/toast";
-import { toast as hookToast } from "@/components/ui/toast";
+import { toast, useToast } from "./use-toast.tsx";
 
-export const useToast = useHookToast;
-export const toast = hookToast;
+export { useToast, toast };

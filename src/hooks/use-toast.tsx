@@ -1,11 +1,24 @@
 
-import { Toast, ToastActionElement, ToastProps } from "@/components/ui/toast";
+import * as React from "react";
 import {
   toast as sonnerToast,
   Toaster as SonnerToaster,
 } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
+
+export interface ToastProps {
+  variant?: "default" | "destructive";
+  children?: React.ReactNode;
+}
+
+export type ToastActionElement = React.ReactElement<{
+  altText?: string;
+  icon?: React.ReactNode;
+  title?: string;
+  onClick?: () => void;
+  href?: string;
+}>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
