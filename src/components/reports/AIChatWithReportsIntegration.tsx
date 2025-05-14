@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { MessageSquare, Bot, User, Send, FileText, BarChart, Calendar, ArrowUpRight } from "lucide-react";
+import { MessageSquare, Bot, User, Send, FileText, BarChart, Calendar, ArrowUpRight, Search, RefreshCw, ChevronRight, ThumbsUp, ThumbsDown, Lightbulb, HelpCircle } from "lucide-react";
 import { getValidationReports, ValidationReport } from "@/services/api";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -27,6 +27,7 @@ type Message = {
   role: "user" | "assistant";
   timestamp: Date;
   reportPreview?: ValidationReport;
+  suggestions?: string[];
 };
 
 const AIChatWithReportsIntegration = () => {
@@ -38,13 +39,15 @@ const AIChatWithReportsIntegration = () => {
       id: "welcome",
       content: "Hello! I'm your report assistant. I can help you analyze validation reports, find issues, and provide recommendations.",
       role: "assistant",
-      timestamp: new Date()
+      timestamp: new Date(),
+      suggestions: ["Show latest report", "Find reports with errors", "Summarize all reports", "Help me interpret results"]
     }
   ]);
   const [inputValue, setInputValue] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [reports, setReports] = useState<ValidationReport[]>([]);
   const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
@@ -68,6 +71,11 @@ const AIChatWithReportsIntegration = () => {
       setReports(data);
     } catch (error) {
       console.error("Error fetching reports:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch reports. Please try again later.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingReports(false);
     }
@@ -112,14 +120,33 @@ const AIChatWithReportsIntegration = () => {
         userInput.includes('error') ||
         userInput.includes('fail') ||
         userInput.includes('issue');
+      
+      const isComparisonRequest =
+        userInput.includes('compare') ||
+        userInput.includes('difference') ||
+        userInput.includes('vs') ||
+        userInput.includes('versus');
+      
+      const isChartRequest = 
+        userInput.includes('chart') ||
+        userInput.includes('graph') ||
+        userInput.includes('visualization') ||
+        userInput.includes('visualize');
+      
+      const isSummaryRequest = 
+        userInput.includes('summary') ||
+        userInput.includes('summarize') ||
+        userInput.includes('overview');
 
       let response = "";
       let reportToShow: ValidationReport | undefined = undefined;
+      let suggestions: string[] = [];
       
       // Handle different intents
       if (isReportRequest) {
         if (reports.length === 0) {
           response = "I don't see any reports available. Would you like to run a new validation?";
+          suggestions = ["Run new validation", "Go to validation page"];
         } else {
           if (isLatestRequest) {
             // Get most recent report
@@ -129,6 +156,7 @@ const AIChatWithReportsIntegration = () => {
             
             response = `Here's the latest report for "${latestReport.datasetName}" from ${format(new Date(latestReport.timestamp), 'MMMM d, yyyy')}. It had ${latestReport.summary.fail} failed checks, ${latestReport.summary.warning} warnings, and ${latestReport.summary.pass} passing checks.`;
             reportToShow = latestReport;
+            suggestions = ["Show me details", "Find errors", "Compare with previous"];
           } 
           else if (isErrorRequest) {
             // Find report with most errors
@@ -136,16 +164,69 @@ const AIChatWithReportsIntegration = () => {
             
             response = `I found a report for "${errorReport.datasetName}" with the most validation errors. It has ${errorReport.summary.fail} failed checks that need attention.`;
             reportToShow = errorReport;
+            suggestions = ["Show error details", "How to fix these?", "Run new validation"];
+          }
+          else if (isComparisonRequest) {
+            if (reports.length >= 2) {
+              const sortedReports = [...reports].sort((a, b) => 
+                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              );
+              
+              const latest = sortedReports[0];
+              const previous = sortedReports[1];
+              
+              const failDiff = latest.summary.fail - previous.summary.fail;
+              const passDiff = latest.summary.pass - previous.summary.pass;
+              
+              response = `Comparing the latest two reports:
+              
+Latest (${format(new Date(latest.timestamp), 'MMM d')}): ${latest.summary.pass} passed, ${latest.summary.fail} failed
+Previous (${format(new Date(previous.timestamp), 'MMM d')}): ${previous.summary.pass} passed, ${previous.summary.fail} failed
+
+${failDiff > 0 ? `⚠️ Failures increased by ${failDiff}` : failDiff < 0 ? `✅ Failures decreased by ${Math.abs(failDiff)}` : 'No change in failures'}
+${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ Passes decreased by ${Math.abs(passDiff)}` : 'No change in passes'}`;
+              
+              reportToShow = latest;
+              suggestions = ["View latest report", "View previous report", "What caused changes?"];
+            } else {
+              response = "I need at least two reports to make a comparison. There's only one report available.";
+              suggestions = ["Show available report", "Run new validation"];
+            }
+          }
+          else if (isChartRequest) {
+            response = "I can help you visualize your validation results. Would you like to see charts for a specific report or trends across all reports?";
+            suggestions = ["Latest report charts", "Error trend charts", "Data quality trends"];
+          }
+          else if (isSummaryRequest) {
+            const totalReports = reports.length;
+            const totalChecks = reports.reduce((sum, report) => 
+              sum + report.summary.pass + report.summary.fail + report.summary.warning, 0);
+            const totalFailures = reports.reduce((sum, report) => sum + report.summary.fail, 0);
+            
+            const recentReports = reports
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              .slice(0, 3);
+            
+            response = `Summary of All Validation Reports:
+
+📊 ${totalReports} total reports with ${totalChecks} validation checks performed
+❌ ${totalFailures} total failures identified across all reports
+🔍 Most recent validation: ${recentReports[0] ? recentReports[0].datasetName + ' (' + format(new Date(recentReports[0].timestamp), 'MMM d') + ')' : 'None'}`;
+            
+            suggestions = ["Show recent reports", "Reports with errors", "Data quality trends"];
           }
           else {
             // General report summary
             response = `I found ${reports.length} validation reports. Would you like to see a specific one or the most recent?`;
+            suggestions = ["Show latest report", "Show reports with errors", "Compare reports"];
           }
         }
       } else if (isHelpRequest) {
-        response = "I can help you analyze validation reports, find issues in your data, and provide recommendations. Try asking questions like:\n\n• Show me my latest report\n• Are there any reports with errors?\n• Summarize validation results\n• What are the most common data issues?";
+        response = "I can help you analyze validation reports, find issues in your data, and provide recommendations. Try asking questions like:\n\n• Show me my latest report\n• Are there any reports with errors?\n• Summarize validation results\n• What are the most common data issues?\n• Compare latest reports";
+        suggestions = ["Show latest report", "Find reports with errors", "Get recommendations"];
       } else {
         response = "I'm your data validation assistant. I can help you review reports, find issues, and navigate reports. Try asking about your validation reports or data quality issues.";
+        suggestions = ["Show latest report", "Search for errors", "Get help interpreting results"];
       }
       
       // Add AI response
@@ -154,7 +235,8 @@ const AIChatWithReportsIntegration = () => {
         content: response,
         role: "assistant",
         timestamp: new Date(),
-        reportPreview: reportToShow
+        reportPreview: reportToShow,
+        suggestions: suggestions
       };
       
       setTimeout(() => {
@@ -189,6 +271,32 @@ const AIChatWithReportsIntegration = () => {
     }
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setInputValue(suggestion);
+    setTimeout(() => handleSendMessage(), 100);
+  };
+
+  const handleFeedback = (positive: boolean) => {
+    toast({
+      title: positive ? "Feedback Received" : "Feedback Received",
+      description: positive ? "Thank you for your positive feedback!" : "Thank you for your feedback. We'll work to improve our responses.",
+    });
+  };
+
+  const filteredReports = searchTerm.trim() === "" 
+    ? reports 
+    : reports.filter(report => {
+        const searchLower = searchTerm.toLowerCase();
+        return (
+          report.datasetName.toLowerCase().includes(searchLower) ||
+          report.results.some(r => 
+            r.check.toLowerCase().includes(searchLower) ||
+            r.details.toLowerCase().includes(searchLower) ||
+            r.status.toLowerCase().includes(searchLower)
+          )
+        );
+      });
+
   return (
     <>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -203,13 +311,41 @@ const AIChatWithReportsIntegration = () => {
         </SheetTrigger>
         <SheetContent className="sm:max-w-[400px] p-0 flex flex-col h-full border-l shadow-lg">
           <SheetHeader className="px-4 py-3 border-b">
-            <div className="flex items-center">
-              <Bot className="h-5 w-5 mr-2 text-primary" />
-              <SheetTitle>Report Assistant</SheetTitle>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center">
+                <Bot className="h-5 w-5 mr-2 text-primary" />
+                <SheetTitle>Report Assistant</SheetTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={fetchReports} 
+                  className="h-8 w-8" 
+                  disabled={isLoadingReports}
+                >
+                  <RefreshCw className={`h-4 w-4 ${isLoadingReports ? 'animate-spin' : ''}`} />
+                </Button>
+                <Badge variant="outline" className="bg-primary/10">
+                  {reports.length} Reports
+                </Badge>
+              </div>
             </div>
-            <SheetDescription className="text-xs">
+            <SheetDescription className="text-xs mt-1">
               Chat about reports and data validation results
             </SheetDescription>
+            
+            {/* Search bar */}
+            <div className="mt-2 relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input 
+                type="text"
+                placeholder="Search reports..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              />
+            </div>
           </SheetHeader>
           
           <ScrollArea className="flex-1 p-4">
@@ -229,14 +365,53 @@ const AIChatWithReportsIntegration = () => {
                     <Avatar className={`h-8 w-8 ${msg.role === "user" ? "bg-primary" : "bg-muted"}`}>
                       {msg.role === "user" ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                     </Avatar>
-                    <div>
+                    <div className="space-y-2">
                       <Card className={`${
                         msg.role === "user" 
                           ? "bg-primary text-primary-foreground" 
                           : "bg-muted"
                       } p-3 shadow-sm`}>
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                        
+                        {/* Feedback buttons - only show for assistant messages */}
+                        {msg.role === "assistant" && (
+                          <div className="flex justify-end mt-2 gap-2 opacity-70">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 rounded-full hover:bg-background/20" 
+                              onClick={() => handleFeedback(true)}
+                            >
+                              <ThumbsUp className="h-3 w-3" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6 rounded-full hover:bg-background/20" 
+                              onClick={() => handleFeedback(false)}
+                            >
+                              <ThumbsDown className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                       </Card>
+                      
+                      {/* Quick reply suggestions */}
+                      {msg.role === "assistant" && msg.suggestions && msg.suggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {msg.suggestions.map((suggestion, index) => (
+                            <Button 
+                              key={index} 
+                              variant="outline" 
+                              size="sm" 
+                              className="text-xs py-1 h-auto bg-background shadow-sm hover:bg-accent"
+                              onClick={() => handleSuggestionClick(suggestion)}
+                            >
+                              {suggestion}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                       
                       {/* Report preview card */}
                       {msg.reportPreview && (
@@ -297,6 +472,30 @@ const AIChatWithReportsIntegration = () => {
             </div>
           </ScrollArea>
           
+          {/* Help tips section */}
+          {messages.length <= 2 && (
+            <div className="px-4 py-2 border-t border-dashed border-muted">
+              <div className="flex items-center mb-2 text-sm font-medium text-muted-foreground">
+                <Lightbulb className="h-4 w-4 mr-1.5 text-amber-500" />
+                <span>Try asking:</span>
+              </div>
+              <div className="grid grid-cols-1 gap-1">
+                {["Show my latest report", "Find reports with errors", "Compare latest reports"].map((tip, i) => (
+                  <Button 
+                    key={i} 
+                    variant="ghost" 
+                    size="sm" 
+                    className="justify-start text-xs h-auto py-1.5 px-2" 
+                    onClick={() => handleSuggestionClick(tip)}
+                  >
+                    <ChevronRight className="h-3 w-3 mr-1 text-muted-foreground" />
+                    {tip}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+          
           <div className="p-4 border-t">
             <form
               onSubmit={(e) => {
@@ -322,6 +521,18 @@ const AIChatWithReportsIntegration = () => {
                 <Send className="h-5 w-5" />
               </Button>
             </form>
+            
+            <div className="flex justify-center mt-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-xs text-muted-foreground flex items-center"
+                onClick={() => handleSuggestionClick("Help me understand these reports")}
+              >
+                <HelpCircle className="h-3 w-3 mr-1" />
+                Need help analyzing reports?
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
