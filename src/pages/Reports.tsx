@@ -12,12 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { CalendarDays, FileText, FileDown, FileText as FileDocument, ChartBar, Trash2 } from "lucide-react";
+import { CalendarDays, FileText, FileDown, FileText as FileDocument, ChartBar, Trash2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import ValidationSummaryCard from "@/components/reports/ValidationSummaryCard";
 import ReportsList from "@/components/reports/ReportsList";
 import ReportDetails from "@/components/reports/ReportDetails";
 import ReportTemplates from "@/components/reports/ReportTemplates";
+import AIChatWithReportsIntegration from "@/components/reports/AIChatWithReportsIntegration";
 
 const Reports = () => {
   const { toast } = useToast();
@@ -130,22 +131,41 @@ const Reports = () => {
             View validation reports, create templates, and export results
           </p>
         </div>
+        <Button variant="outline" onClick={() => refetch()} className="gap-1.5">
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
       </div>
 
-      <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled Validations</TabsTrigger>
+      <Tabs defaultValue={activeTab} value={activeTab} onValueChange={setActiveTab} className="space-y-0">
+        <TabsList className="mb-6 border-b w-full justify-start h-12 rounded-none bg-transparent p-0">
+          <TabsTrigger 
+            value="reports" 
+            className="rounded-none border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none h-full"
+          >
+            Reports
+          </TabsTrigger>
+          <TabsTrigger 
+            value="templates" 
+            className="rounded-none border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none h-full"
+          >
+            Templates
+          </TabsTrigger>
+          <TabsTrigger 
+            value="scheduled" 
+            className="rounded-none border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none h-full"
+          >
+            Scheduled Validations
+          </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="reports" className="space-y-6">
+        <TabsContent value="reports" className="space-y-6 mt-0">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Reports list sidebar */}
             <div className="space-y-4">
               <ValidationSummaryCard reports={reports} />
               
-              <Card className={isLoading ? "opacity-70 pointer-events-none" : ""}>
+              <Card className={isLoading ? "opacity-70 pointer-events-none shadow-sm" : "shadow-sm"}>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-xl">Recent Reports</CardTitle>
                   <CardDescription>
@@ -174,7 +194,7 @@ const Reports = () => {
                   onDownloadPDF={() => handleDownloadPDF(selectedReport)}
                 />
               ) : (
-                <Card>
+                <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle>No Report Selected</CardTitle>
                     <CardDescription>
@@ -184,7 +204,10 @@ const Reports = () => {
                   <CardContent className="flex items-center justify-center py-12 text-muted-foreground">
                     <div className="text-center">
                       <FileText className="mx-auto h-12 w-12 opacity-50 mb-2" />
-                      <p>Select a validation report to view results</p>
+                      <p className="mb-3">Select a validation report to view results</p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Reports show validation results, issue details, and data quality metrics for your datasets
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -198,7 +221,7 @@ const Reports = () => {
         </TabsContent>
         
         <TabsContent value="scheduled">
-          <Card>
+          <Card className="shadow-sm">
             <CardHeader>
               <CardTitle>Scheduled Validations</CardTitle>
               <CardDescription>
@@ -213,6 +236,9 @@ const Reports = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {/* Add chatbot component for reporting assistance */}
+      <AIChatWithReportsIntegration />
     </div>
   );
 };
