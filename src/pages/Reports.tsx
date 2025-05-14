@@ -18,12 +18,13 @@ import ValidationSummaryCard from "@/components/reports/ValidationSummaryCard";
 import ReportsList from "@/components/reports/ReportsList";
 import ReportDetails from "@/components/reports/ReportDetails";
 import ReportTemplates from "@/components/reports/ReportTemplates";
-import AIChatWithReportsIntegration from "@/components/reports/AIChatWithReportsIntegration";
+import { useChatbot } from "@/contexts/ChatbotContext";
 
 const Reports = () => {
   const { toast } = useToast();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("reports");
+  const { setPageContext } = useChatbot();
   
   // Fetch all validation reports
   const { 
@@ -40,6 +41,12 @@ const Reports = () => {
       return reports;
     }
   });
+
+  // Set page context for the chatbot
+  useEffect(() => {
+    setPageContext("reports");
+    return () => setPageContext(null);
+  }, [setPageContext]);
 
   // Get selected report
   const selectedReport = selectedReportId 
@@ -236,9 +243,6 @@ const Reports = () => {
           </Card>
         </TabsContent>
       </Tabs>
-      
-      {/* Add chatbot component for reporting assistance */}
-      <AIChatWithReportsIntegration />
     </div>
   );
 };

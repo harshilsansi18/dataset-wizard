@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { useEffect } from "react";
+import { ChatbotProvider } from "@/contexts/ChatbotContext";
 
 import Navbar from "@/components/navigation/Navbar";
 import AIChatbotEnhanced from "@/components/AIChatbotEnhanced";
@@ -30,25 +31,27 @@ const AppContent = () => {
   return (
     <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-            <Navbar />
-            <main>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/datasets" element={<Datasets />} />
-                <Route path="/validation" element={<Validation />} />
-                <Route path="/comparison" element={<Comparison />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-            <AIChatbotEnhanced />
-          </div>
-        </BrowserRouter>
+        <ChatbotProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+              <Navbar />
+              <main>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/datasets" element={<Datasets />} />
+                  <Route path="/validation" element={<Validation />} />
+                  <Route path="/comparison" element={<Comparison />} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </main>
+              <AIChatbotEnhanced />
+            </div>
+          </BrowserRouter>
+        </ChatbotProvider>
       </TooltipProvider>
     </ThemeProvider>
   );
