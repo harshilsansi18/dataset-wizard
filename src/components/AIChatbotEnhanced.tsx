@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,10 +6,9 @@ import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Upload } from "lucide-react";  // Corrected capitalization
+import { Upload, Check, AlertTriangle, FileText, Database, RefreshCw } from "lucide-react";
 import { useDatasets } from '@/contexts/DatasetsContext';
-// Let's make sure to import uploadDataset from the API
-import { uploadDataset, runValidation } from '@/services/api';
+import { uploadDataset, runValidation, ValidationMethods } from '@/services/api';
 
 interface Message {
   id: string;
@@ -22,6 +22,8 @@ const AIChatbotEnhanced: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [lastUploadedDatasetId, setLastUploadedDatasetId] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [activeValidationMethod, setActiveValidationMethod] = useState<string | null>(null);
   const { refreshDatasets } = useDatasets();
   const { toast } = useToast();
 
@@ -124,7 +126,7 @@ const AIChatbotEnhanced: React.FC = () => {
     }
   };
 
-  const handleRunValidation = async () => {
+  const handleRunValidation = async (validationMethod: string = "basic") => {
     if (!lastUploadedDatasetId) {
       toast({
         title: "No Dataset Uploaded",
@@ -134,22 +136,32 @@ const AIChatbotEnhanced: React.FC = () => {
       return;
     }
 
+    setIsValidating(true);
+    setActiveValidationMethod(validationMethod);
+
     try {
+      // Add a message indicating validation has started
+      const startMessage: Message = {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: `Starting ${getValidationMethodName(validationMethod)} validation on your dataset...`,
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(startMessage);
+
       // Run validation on the last uploaded dataset
-      // Fix: Pass a second parameter to runValidation (the validation method)
-      // The available methods are defined in api.ts as ValidationMethods
-      const validationResult = await runValidation(lastUploadedDatasetId, "basic");
+      const validationResult = await runValidation(lastUploadedDatasetId, validationMethod);
 
       toast({
         title: "Validation Started",
-        description: `Validation has been initiated for dataset ID: ${lastUploadedDatasetId}.`,
+        description: `${getValidationMethodName(validationMethod)} validation has been initiated for your dataset.`,
       });
 
       // Add a message to the chat about the validation
       const validationMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
-        content: `I've started the validation process for the dataset. I'll let you know when it's done.`,
+        content: `I've completed the ${getValidationMethodName(validationMethod)} validation process for your dataset. You can view detailed results in the Validation tab.`,
         timestamp: new Date().toISOString(),
       };
       addMessage(validationMessage);
@@ -166,12 +178,42 @@ const AIChatbotEnhanced: React.FC = () => {
       const errorMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
-        content: "I couldn't start the validation process. Please try again.",
+        content: "I couldn't complete the validation process. Please try again or try a different validation method.",
         timestamp: new Date().toISOString(),
       };
       addMessage(errorMessage);
+    } finally {
+      setIsValidating(false);
+      setActiveValidationMethod(null);
     }
   };
+
+  // Helper function to get readable validation method names
+  const getValidationMethodName = (method: string): string => {
+    switch (method) {
+      case ValidationMethods.BASIC:
+        return "Basic";
+      case ValidationMethods.ADVANCED:
+        return "Advanced";
+      case ValidationMethods.SCHEMA_VALIDATION:
+        return "Schema";
+      case ValidationMethods.FORMAT_CHECKS:
+        return "Format";
+      case ValidationMethods.DATA_COMPLETENESS:
+        return "Data Completeness";
+      case ValidationMethods.DATA_QUALITY:
+        return "Data Quality";
+      default:
+        return method.charAt(0).toUpperCase() + method.slice(1).replace(/_/g, ' ');
+    }
+  };
+
+  // Validation button configuration
+  const validationButtons = [
+    { method: ValidationMethods.BASIC, label: "Basic" },
+    { method: ValidationMethods.SCHEMA_VALIDATION, label: "Schema" },
+    { method: ValidationMethods.DATA_QUALITY, label: "Quality" },
+  ];
 
   return (
     <Card className="w-full h-full flex flex-col">
@@ -211,32 +253,73 @@ const AIChatbotEnhanced: React.FC = () => {
                 </div>
               </div>
             )}
+            {isValidating && (
+              <div className="flex items-start justify-start">
+                <Avatar className="mr-3">
+                  <AvatarImage src="https://github.com/shadcn.png" alt="AI Avatar" />
+                  <AvatarFallback>AI</AvatarFallback>
+                </Avatar>
+                <div className="rounded-lg p-2 text-sm w-fit max-w-[60%] bg-muted flex items-center">
+                  <RefreshCw className="animate-spin h-4 w-4 mr-2" />
+                  Running {activeValidationMethod ? getValidationMethodName(activeValidationMethod) : "validation"}...
+                </div>
+              </div>
+            )}
           </div>
         </ScrollArea>
       </CardContent>
       <CardFooter>
-        <div className="w-full flex items-center space-x-2">
-          <Input
-            type="text"
-            placeholder="Type your message..."
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-          />
-          <Button onClick={handleSendMessage}>Send</Button>
-          <Input
-            type="file"
-            id="upload-dataset"
-            className="hidden"
-            onChange={handleFileUpload}
-          />
-          <Button variant="outline" asChild>
-            <label htmlFor="upload-dataset" className="cursor-pointer">
-              <Upload className="mr-2 h-4 w-4" />
-              <span>Upload Dataset</span>
-            </label>
-          </Button>
-          <Button onClick={handleRunValidation}>Run Validation</Button>
+        <div className="w-full flex flex-col space-y-2">
+          <div className="w-full flex items-center space-x-2">
+            <Input
+              type="text"
+              placeholder="Type your message..."
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+            />
+            <Button onClick={handleSendMessage}>Send</Button>
+            <Input
+              type="file"
+              id="upload-dataset"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button variant="outline" asChild>
+              <label htmlFor="upload-dataset" className="cursor-pointer">
+                <Upload className="mr-2 h-4 w-4" />
+                <span>Upload</span>
+              </label>
+            </Button>
+          </div>
+          
+          {lastUploadedDatasetId && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs text-muted-foreground">Validate:</span>
+              {validationButtons.map((btn) => (
+                <Button 
+                  key={btn.method}
+                  variant="secondary" 
+                  size="sm"
+                  disabled={isValidating}
+                  onClick={() => handleRunValidation(btn.method)}
+                  className="flex items-center h-8"
+                >
+                  {btn.method === ValidationMethods.BASIC && <Check className="h-3 w-3 mr-1" />}
+                  {btn.method === ValidationMethods.SCHEMA_VALIDATION && <FileText className="h-3 w-3 mr-1" />}
+                  {btn.method === ValidationMethods.DATA_QUALITY && <AlertTriangle className="h-3 w-3 mr-1" />}
+                  {btn.label}
+                </Button>
+              ))}
+              
+              {isValidating && (
+                <span className="text-xs text-muted-foreground flex items-center">
+                  <RefreshCw className="animate-spin h-3 w-3 mr-1" />
+                  Processing...
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </CardFooter>
     </Card>
