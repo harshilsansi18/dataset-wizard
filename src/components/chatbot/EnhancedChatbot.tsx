@@ -430,7 +430,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     }
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDatasetFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     
@@ -773,7 +773,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChatFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -977,7 +977,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                     
                     if (datasetFileInputRef.current) {
                       datasetFileInputRef.current.files = fileList.files;
-                      handleFileUpload({ target: { files: fileList.files } } as any);
+                      handleDatasetFileUpload({ target: { files: fileList.files } } as any);
                     }
                   }
                 }}
@@ -1024,7 +1024,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                 ref={datasetFileInputRef}
                 style={{ display: 'none' }}
                 accept=".csv,.xlsx,.xls,.json"
-                onChange={handleFileUpload}
+                onChange={handleDatasetFileUpload}
               />
             </div>
           )}
@@ -1093,53 +1093,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         ref={fileInputRef}
         style={{ display: 'none' }}
         accept=".json"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            try {
-              const chatData = JSON.parse(event.target?.result as string);
-              
-              if (!chatData.messages || !Array.isArray(chatData.messages)) {
-                throw new Error("Invalid chat data format");
-              }
-              
-              // Convert string dates to Date objects
-              const parsedMessages = chatData.messages.map((msg: any) => ({
-                ...msg,
-                timestamp: new Date(msg.timestamp)
-              }));
-              
-              // Add imported messages
-              clearMessages();
-              parsedMessages.forEach((msg: ChatMessage) => addMessage(msg));
-              
-              // Save as a new chat
-              saveCurrentChat(chatData.title || "Imported Chat");
-              
-              toast({
-                title: "Chat Imported",
-                description: "The conversation was successfully imported."
-              });
-            } catch (error) {
-              console.error("Error importing chat:", error);
-              toast({
-                title: "Import Failed",
-                description: "Failed to import the conversation. The file format may be invalid.",
-                variant: "destructive"
-              });
-            }
-            
-            // Reset the file input
-            if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-            }
-          };
-          
-          reader.readAsText(file);
-        }}
+        onChange={handleChatFileUpload}
       />
       
       {/* Save Chat Dialog */}
@@ -1159,14 +1113,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveChatOpen(false)}>Cancel</Button>
-            <Button onClick={() => {
-              saveCurrentChat(chatTitle);
-              setSaveChatOpen(false);
-              toast({
-                title: "Chat Saved",
-                description: "Your conversation has been saved."
-              });
-            }}>Save</Button>
+            <Button onClick={handleSaveChat}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
