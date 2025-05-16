@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -19,7 +19,14 @@ import {
   PanelLeftClose, Volume, VolumeX, PlusCircle, Sparkles, 
   Upload, FileCheck, Database, Loader
 } from "lucide-react";
-import { getDatasets, runValidation, ValidationMethods, generateValidationReport, getValidationReports } from "@/services/api";
+import { 
+  getDatasets, 
+  uploadDataset,
+  runValidation, 
+  ValidationMethods, 
+  generateValidationReport, 
+  getValidationReports 
+} from "@/services/api";
 import { useChatbot, ChatMessage } from '@/contexts/ChatbotContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -49,6 +56,7 @@ const EnhancedChatbot = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedDataset, setUploadedDataset] = useState<any | null>(null);
   const [validationResults, setValidationResults] = useState<any[] | null>(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
   
@@ -145,10 +153,10 @@ const EnhancedChatbot = () => {
       }
       
       // Handle validate dataset request
-      if (isValidateRequest && uploadedFile) {
+      if (isValidateRequest && uploadedDataset) {
         const botMessage: ChatMessage = {
           id: `msg_${Date.now()}_bot`,
-          content: `I'll validate your file "${uploadedFile.name}". What type of validation would you like to perform?`,
+          content: `I'll validate your dataset "${uploadedDataset.name}". What type of validation would you like to perform?`,
           role: "assistant",
           timestamp: new Date(),
           suggestions: ["Basic validation", "Schema validation", "Data completeness", "Format checks"]
@@ -162,19 +170,19 @@ const EnhancedChatbot = () => {
         return;
       }
       
-      // Check for validation method selection
-      if (uploadedFile) {
+      // Check for validation method selection after upload
+      if (uploadedDataset) {
         const validationMethods = [
-          { name: "basic", keywords: ["basic", "simple"] },
-          { name: "schema_validation", keywords: ["schema", "structure", "header"] },
-          { name: "data_completeness", keywords: ["complete", "missing", "empty"] },
-          { name: "format_checks", keywords: ["format", "pattern", "type"] },
-          { name: "advanced", keywords: ["advanced", "full", "comprehensive"] }
+          { name: ValidationMethods.BASIC, keywords: ["basic", "simple"] },
+          { name: ValidationMethods.SCHEMA_VALIDATION, keywords: ["schema", "structure", "header"] },
+          { name: ValidationMethods.DATA_COMPLETENESS, keywords: ["complete", "missing", "empty"] },
+          { name: ValidationMethods.FORMAT_CHECKS, keywords: ["format", "pattern", "type"] },
+          { name: ValidationMethods.ADVANCED, keywords: ["advanced", "full", "comprehensive"] }
         ];
         
         for (const method of validationMethods) {
           if (method.keywords.some(keyword => userInput.includes(keyword))) {
-            await handleValidateUploadedFile(method.name);
+            await handleValidateDataset(uploadedDataset.id, method.name);
             return;
           }
         }
@@ -276,13 +284,7 @@ const EnhancedChatbot = () => {
       
       // Handle different types of queries
       if (isReportQuery && reports.length > 0) {
-        // Fetch reports if needed
-        if (reports.length === 0) {
-          await fetchReports();
-        }
-        
         if (isLatestReportRequest) {
-          // Get most recent report
           const latestReport = [...reports].sort((a, b) => 
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           )[0];
@@ -296,7 +298,6 @@ const EnhancedChatbot = () => {
           }
         } 
         else if (isErrorReportRequest) {
-          // Find report with most errors
           const errorReport = [...reports].sort((a, b) => b.summary.fail - a.summary.fail)[0];
           
           if (errorReport) {
@@ -348,13 +349,11 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           responseSuggestions = ["Show recent reports", "Reports with errors", "Data quality trends"];
         }
         else {
-          // General report summary
           response = `I found ${reports.length} validation reports. Would you like to see a specific one or the most recent?`;
           responseSuggestions = ["Show latest report", "Show reports with errors", "Compare reports"];
         }
       }
       else if (isValidationQuery && isDatasetQuery) {
-        // Fetch datasets if needed
         if (datasets.length === 0) {
           await fetchDatasets();
         }
@@ -363,33 +362,28 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           response = `I can help you validate your datasets. I've found ${datasets.length} datasets in your system. Would you like me to suggest a validation method?`;
           responseSuggestions = ["Run basic validation", "Check data completeness", "Check data formatting"];
         } else {
-          response = "I can help you validate your data, but I don't see any datasets in your system. Would you like to go to the datasets page to upload a file first?";
-          responseSuggestions = ["Go to datasets page", "Tell me about validation methods"];
+          response = "I can help you validate your data, but I don't see any datasets in your system. Would you like to upload a dataset now?";
+          responseSuggestions = ["Upload dataset", "Tell me about validation methods"];
+          setShowFileUpload(true);
         }
       } else if (userInput.includes("help") || userInput.includes("explain") || userInput.includes("how")) {
         response = "I can help you with several tasks:\n\n• Validate datasets for quality issues\n• Generate validation reports\n• Check for missing values or formatting issues\n• Navigate to different parts of the application\n\nWhat would you like to do?";
         
-        // Add helpful action suggestions
         responseSuggestions = ["Show latest report", "Run data validation", "Understand validation methods", "Analyze data quality"];
       } else if (userInput.includes("thank")) {
         response = "You're welcome! I'm here to help with all your data validation needs. Let me know if you have any more questions.";
         responseSuggestions = ["What can you help with?"];
       } else {
-        // New enhanced responses for general questions
         const responses = [
           "I can help you validate data, generate reports, or navigate to different sections of the app. What would you like to do?",
           "As your data assistant, I can analyze reports, check data quality, or help you understand validation results. What are you working on today?",
           "Need help with your data validation? I can show reports, run validations, or explain data quality concepts. What's your focus right now?"
         ];
         
-        // Select a random response
         response = responses[Math.floor(Math.random() * responses.length)];
-        
-        // Add general action suggestions
         responseSuggestions = ["Run validation", "View reports", "Manage datasets", "Help me understand"];
       }
       
-      // Add a slight delay to simulate thinking
       setTimeout(() => {
         const botMessage: ChatMessage = {
           id: `msg_${Date.now()}_bot`,
@@ -403,7 +397,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         addMessage(botMessage);
         setIsProcessing(false);
         
-        // Play receive sound if not muted
         playSound('receive');
       }, 700);
       
@@ -437,7 +430,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     setIsUploading(true);
     setUploadedFile(file);
     
-    // Create a message to show the file is being uploaded
     const uploadMessage: ChatMessage = {
       id: `msg_${Date.now()}_user`,
       content: `I'd like to upload "${file.name}" for validation.`,
@@ -448,37 +440,20 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     addMessage(uploadMessage);
     
     try {
-      // Create FormData for the file upload
-      const formData = new FormData();
-      formData.append('file', file);
+      const result = await uploadDataset(file);
+      setUploadedDataset(result);
       
-      // Use the uploadDataset function from API
-      const response = await fetch('/api/datasets/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
-      }
-      
-      const uploadedDataset = await response.json();
-      
-      // Refresh datasets
       fetchDatasets();
       
-      // Add success message
       const successMessage: ChatMessage = {
         id: `msg_${Date.now()}_bot`,
-        content: `I've successfully uploaded "${file.name}". Would you like me to validate this file now?`,
+        content: `I've successfully uploaded "${file.name}". Would you like me to validate this dataset now?`,
         role: "assistant",
         timestamp: new Date(),
         suggestions: ["Yes, run basic validation", "Yes, check data completeness", "No, I'll do it later"]
       };
       
       addMessage(successMessage);
-      
-      // Show file upload UI
       setShowFileUpload(false);
       
     } catch (error) {
@@ -503,34 +478,18 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     } finally {
       setIsUploading(false);
       
-      // Clear file input value
       if (datasetFileInputRef.current) {
         datasetFileInputRef.current.value = '';
       }
     }
   };
 
-  const handleValidateUploadedFile = async (validationType: string) => {
-    if (!uploadedFile) {
-      const noFileMessage: ChatMessage = {
-        id: `msg_${Date.now()}_bot`,
-        content: "I need a file to validate first. Please upload a dataset.",
-        role: "assistant",
-        timestamp: new Date(),
-        suggestions: ["Upload a dataset"]
-      };
-      
-      addMessage(noFileMessage);
-      setIsProcessing(false);
-      return;
-    }
-    
+  const handleValidateDataset = async (datasetId: string, validationType: string) => {
     setIsValidating(true);
     
-    // Create message to show validation is starting
     const validatingMessage: ChatMessage = {
       id: `msg_${Date.now()}_user`,
-      content: `Please run ${validationType.replace('_', ' ')} validation on "${uploadedFile.name}".`,
+      content: `Please run ${validationType.replace('_', ' ')} validation on this dataset.`,
       role: "user",
       timestamp: new Date()
     };
@@ -539,7 +498,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     
     const processingMessage: ChatMessage = {
       id: `msg_${Date.now()}_bot`,
-      content: `I'm running ${validationType.replace('_', ' ')} validation on "${uploadedFile.name}". This might take a moment...`,
+      content: `I'm running ${validationType.replace('_', ' ')} validation on the dataset. This might take a moment...`,
       role: "assistant",
       timestamp: new Date()
     };
@@ -547,19 +506,9 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     addMessage(processingMessage);
     
     try {
-      // Get the dataset ID from previous upload
-      const datasetsResponse = await getDatasets();
-      const uploadedDataset = datasetsResponse.find(dataset => dataset.name === uploadedFile.name);
-      
-      if (!uploadedDataset) {
-        throw new Error("Could not find the uploaded dataset");
-      }
-      
-      // Run validation using the API
-      const results = await runValidation(uploadedDataset.id, validationType);
+      const results = await runValidation(datasetId, validationType);
       setValidationResults(results);
       
-      // Determine validation status
       let failCount = 0;
       let warningCount = 0;
       let passCount = 0;
@@ -570,12 +519,14 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         passCount = results.filter(r => r.status === "Pass").length;
       }
       
-      // Generate report
+      const dataset = datasets.find(d => d.id === datasetId) || uploadedDataset;
+      const datasetName = dataset ? dataset.name : "Dataset";
+      
       let reportId;
       try {
         const report = await generateValidationReport(
-          uploadedDataset.id,
-          uploadedDataset.name,
+          datasetId,
+          datasetName,
           results
         );
         reportId = report.id;
@@ -583,8 +534,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         console.error("Error generating report:", error);
       }
       
-      // Create validation result message
-      let resultContent = `Validation complete for "${uploadedFile.name}".\n\n`;
+      let resultContent = `Validation complete for "${datasetName}".\n\n`;
       resultContent += `📊 Summary: ${passCount} passed, ${failCount} failed, ${warningCount} warnings\n\n`;
       
       if (failCount > 0) {
@@ -605,7 +555,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         resultContent += `\n⚠️ ${warningCount} warnings to review\n`;
       }
       
-      // Add validation results message
       const resultMessage: ChatMessage = {
         id: `msg_${Date.now()}_bot`,
         content: resultContent,
@@ -613,7 +562,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         timestamp: new Date(),
         reportPreview: {
           id: reportId,
-          datasetName: uploadedFile.name,
+          datasetName: datasetName,
           timestamp: new Date(),
           summary: {
             pass: passCount,
@@ -633,19 +582,18 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
       
       addMessage(resultMessage);
       
-      // Refresh reports
       fetchReports();
       
     } catch (error) {
-      console.error("Error validating file:", error);
+      console.error("Error validating dataset:", error);
       
       const errorMessage: ChatMessage = {
         id: `msg_${Date.now()}_bot`,
-        content: `I encountered an issue validating "${uploadedFile.name}". The file may be corrupted or in an unsupported format.`,
+        content: `I encountered an issue validating the dataset. The file may be corrupted or in an unsupported format.`,
         role: "assistant",
         timestamp: new Date(),
         isError: true,
-        suggestions: ["Try another file", "Try a different validation method"]
+        suggestions: ["Try another dataset", "Try a different validation method"]
       };
       
       addMessage(errorMessage);
@@ -678,15 +626,10 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
       title: positive ? "Feedback Received" : "Feedback Received",
       description: positive ? "Thank you for your positive feedback!" : "Thank you for your feedback. We'll work to improve our responses.",
     });
-    
-    // You could log feedback to analytics here
   };
 
   const handleViewReport = (report: any) => {
-    // Store report ID in session storage to highlight it on reports page
     sessionStorage.setItem('highlightReportId', report.id);
-    
-    // Navigate to reports page
     navigate('/reports');
     setIsOpen(false);
   };
@@ -700,7 +643,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
   };
 
   const handleOpenSaveDialog = () => {
-    // Default title is based on first user message or current chat title
     const existingChat = currentChatId ? 
       savedChats.find(c => c.id === currentChatId) : null;
     
@@ -730,7 +672,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
 
   const handleExportChat = () => {
     try {
-      // Create a blob with the chat data
       const chatData = {
         title: currentChatId ? 
           savedChats.find(c => c.id === currentChatId)?.title || "Exported Chat" : 
@@ -742,14 +683,12 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
       const blob = new Blob([JSON.stringify(chatData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
-      // Create a link and trigger the download
       const link = document.createElement('a');
       link.href = url;
       link.download = `chat-export-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(link);
       link.click();
       
-      // Clean up
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       
@@ -786,17 +725,14 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           throw new Error("Invalid chat data format");
         }
         
-        // Convert string dates to Date objects
         const parsedMessages = chatData.messages.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp)
         }));
         
-        // Add imported messages
         clearMessages();
         parsedMessages.forEach((msg: ChatMessage) => addMessage(msg));
         
-        // Save as a new chat
         saveCurrentChat(chatData.title || "Imported Chat");
         
         toast({
@@ -812,7 +748,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         });
       }
       
-      // Reset the file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -821,17 +756,12 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     reader.readAsText(file);
   };
 
-  // Function to play sound effects if not muted
   const playSound = (type: 'send' | 'receive') => {
     if (isMuted) return;
-    
-    // This could be enhanced to play actual sounds
-    // For now just logging
     console.log(`Playing ${type} sound`);
   };
 
   const handleNewChat = () => {
-    // If current chat has messages, prompt to save
     if (messages.length > 1) {
       toast({
         title: "Starting New Chat",
@@ -841,6 +771,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     
     clearMessages();
     setUploadedFile(null);
+    setUploadedDataset(null);
     setValidationResults(null);
     setShowFileUpload(false);
   };
@@ -879,7 +810,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* History Button - Saved Chats */}
                 <SavedChats 
                   savedChats={savedChats}
                   currentChatId={currentChatId}
@@ -893,7 +823,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                   }}
                 />
                 
-                {/* Settings Button */}
                 <ChatSettings 
                   onClearChat={handleClearChat}
                   onSaveChat={handleOpenSaveDialog}
@@ -901,7 +830,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                   onImportChat={handleImportChat}
                 />
                 
-                {/* New Chat Button */}
                 <Button 
                   variant="ghost" 
                   size="icon" 
@@ -919,7 +847,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
               </div>
             </div>
             
-            {/* Search bar */}
             <div className="mt-3 relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -932,7 +859,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
             </div>
           </SheetHeader>
           
-          {/* Chat Messages History */}
           <ChatHistory
             messages={messages.filter(msg => 
               searchTerm ? msg.content.toLowerCase().includes(searchTerm.toLowerCase()) : true
@@ -945,7 +871,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
             showHelp={messages.length <= 2}
           />
           
-          {/* File Upload UI */}
           {showFileUpload && (
             <div className="p-4 border-t border-dashed border-primary/30 bg-primary/5">
               <div className="flex items-center justify-between mb-2">
@@ -1087,7 +1012,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         </SheetContent>
       </Sheet>
       
-      {/* Hidden file input for importing chats */}
       <input 
         type="file"
         ref={fileInputRef}
@@ -1096,7 +1020,6 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         onChange={handleChatFileUpload}
       />
       
-      {/* Save Chat Dialog */}
       <Dialog open={saveChatOpen} onOpenChange={setSaveChatOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
