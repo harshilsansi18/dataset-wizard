@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { 
   MessageSquare, Bot, Send, Lightbulb, HelpCircle, Search, 
-  PanelLeftClose, Volume, VolumeX, PlusCircle, Sparkles
+  PanelLeftClose, Volume, VolumeX, PlusCircle, Sparkles, 
+  Upload, FileCheck, Database, Loader
 } from "lucide-react";
 import { getDatasets, runValidation, ValidationMethods, generateValidationReport, getValidationReports } from "@/services/api";
 import { useChatbot, ChatMessage } from '@/contexts/ChatbotContext';
@@ -46,13 +46,25 @@ const EnhancedChatbot = () => {
   const [isLoadingReports, setIsLoadingReports] = useState(false);
   const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [validationResults, setValidationResults] = useState<any[] | null>(null);
+  const [showFileUpload, setShowFileUpload] = useState(false);
   
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const datasetFileInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch reports when chat opens
+  // Fetch reports and datasets when chat opens
   React.useEffect(() => {
-    if (isOpen && reports.length === 0) {
-      fetchReports();
+    if (isOpen) {
+      if (reports.length === 0) {
+        fetchReports();
+      }
+      if (datasets.length === 0) {
+        fetchDatasets();
+      }
     }
   }, [isOpen]);
 
@@ -101,8 +113,75 @@ const EnhancedChatbot = () => {
       // Process user message to find intents and keywords
       const userInput = userMessage.content.toLowerCase();
       
+      // Dataset upload and validation intents
+      const isUploadRequest = 
+        userInput.includes("upload") || 
+        userInput.includes("import") || 
+        userInput.includes("add file") ||
+        userInput.includes("add dataset");
+        
+      const isValidateRequest = 
+        userInput.includes("validate") || 
+        userInput.includes("check") || 
+        userInput.includes("analyze");
+        
+      // Handle upload dataset request
+      if (isUploadRequest) {
+        const botMessage: ChatMessage = {
+          id: `msg_${Date.now()}_bot`,
+          content: "I can help you upload a dataset. Click the button below to select a file to upload, or drag and drop a file here.",
+          role: "assistant",
+          timestamp: new Date(),
+          suggestions: ["Upload CSV file", "Upload Excel file", "Upload JSON file"]
+        };
+        
+        addMessage(botMessage);
+        setIsProcessing(false);
+        setShowFileUpload(true);
+        
+        // Play receive sound if not muted
+        playSound('receive');
+        return;
+      }
+      
+      // Handle validate dataset request
+      if (isValidateRequest && uploadedFile) {
+        const botMessage: ChatMessage = {
+          id: `msg_${Date.now()}_bot`,
+          content: `I'll validate your file "${uploadedFile.name}". What type of validation would you like to perform?`,
+          role: "assistant",
+          timestamp: new Date(),
+          suggestions: ["Basic validation", "Schema validation", "Data completeness", "Format checks"]
+        };
+        
+        addMessage(botMessage);
+        setIsProcessing(false);
+        
+        // Play receive sound if not muted
+        playSound('receive');
+        return;
+      }
+      
+      // Check for validation method selection
+      if (uploadedFile) {
+        const validationMethods = [
+          { name: "basic", keywords: ["basic", "simple"] },
+          { name: "schema_validation", keywords: ["schema", "structure", "header"] },
+          { name: "data_completeness", keywords: ["complete", "missing", "empty"] },
+          { name: "format_checks", keywords: ["format", "pattern", "type"] },
+          { name: "advanced", keywords: ["advanced", "full", "comprehensive"] }
+        ];
+        
+        for (const method of validationMethods) {
+          if (method.keywords.some(keyword => userInput.includes(keyword))) {
+            await handleValidateUploadedFile(method.name);
+            return;
+          }
+        }
+      }
+      
       // Check for navigation requests
-      if (userInput.includes("go to validation") || userInput.includes("validate data") || userInput.includes("run validation")) {
+      if (userInput.includes("go to validation") || userInput.includes("run validation")) {
         // Add a response message
         const botMessage: ChatMessage = {
           id: `msg_${Date.now()}_bot`,
@@ -351,6 +430,237 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploading(true);
+    setUploadedFile(file);
+    
+    // Create a message to show the file is being uploaded
+    const uploadMessage: ChatMessage = {
+      id: `msg_${Date.now()}_user`,
+      content: `I'd like to upload "${file.name}" for validation.`,
+      role: "user",
+      timestamp: new Date()
+    };
+    
+    addMessage(uploadMessage);
+    
+    try {
+      // Create FormData for the file upload
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Use the uploadDataset function from API
+      const response = await fetch('/api/datasets/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+      
+      const uploadedDataset = await response.json();
+      
+      // Refresh datasets
+      fetchDatasets();
+      
+      // Add success message
+      const successMessage: ChatMessage = {
+        id: `msg_${Date.now()}_bot`,
+        content: `I've successfully uploaded "${file.name}". Would you like me to validate this file now?`,
+        role: "assistant",
+        timestamp: new Date(),
+        suggestions: ["Yes, run basic validation", "Yes, check data completeness", "No, I'll do it later"]
+      };
+      
+      addMessage(successMessage);
+      
+      // Show file upload UI
+      setShowFileUpload(false);
+      
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}_bot`,
+        content: `Sorry, I couldn't upload "${file.name}". Please try again or try a different file format (CSV, Excel, or JSON).`,
+        role: "assistant",
+        timestamp: new Date(),
+        isError: true,
+        suggestions: ["Try another file", "What file formats are supported?"]
+      };
+      
+      addMessage(errorMessage);
+      
+      toast({
+        title: "Upload Failed",
+        description: "Could not upload the dataset. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploading(false);
+      
+      // Clear file input value
+      if (datasetFileInputRef.current) {
+        datasetFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleValidateUploadedFile = async (validationType: string) => {
+    if (!uploadedFile) {
+      const noFileMessage: ChatMessage = {
+        id: `msg_${Date.now()}_bot`,
+        content: "I need a file to validate first. Please upload a dataset.",
+        role: "assistant",
+        timestamp: new Date(),
+        suggestions: ["Upload a dataset"]
+      };
+      
+      addMessage(noFileMessage);
+      setIsProcessing(false);
+      return;
+    }
+    
+    setIsValidating(true);
+    
+    // Create message to show validation is starting
+    const validatingMessage: ChatMessage = {
+      id: `msg_${Date.now()}_user`,
+      content: `Please run ${validationType.replace('_', ' ')} validation on "${uploadedFile.name}".`,
+      role: "user",
+      timestamp: new Date()
+    };
+    
+    addMessage(validatingMessage);
+    
+    const processingMessage: ChatMessage = {
+      id: `msg_${Date.now()}_bot`,
+      content: `I'm running ${validationType.replace('_', ' ')} validation on "${uploadedFile.name}". This might take a moment...`,
+      role: "assistant",
+      timestamp: new Date()
+    };
+    
+    addMessage(processingMessage);
+    
+    try {
+      // Get the dataset ID from previous upload
+      const datasetsResponse = await getDatasets();
+      const uploadedDataset = datasetsResponse.find(dataset => dataset.name === uploadedFile.name);
+      
+      if (!uploadedDataset) {
+        throw new Error("Could not find the uploaded dataset");
+      }
+      
+      // Run validation using the API
+      const results = await runValidation(uploadedDataset.id, validationType);
+      setValidationResults(results);
+      
+      // Determine validation status
+      let failCount = 0;
+      let warningCount = 0;
+      let passCount = 0;
+      
+      if (Array.isArray(results)) {
+        failCount = results.filter(r => r.status === "Fail").length;
+        warningCount = results.filter(r => r.status === "Warning").length;
+        passCount = results.filter(r => r.status === "Pass").length;
+      }
+      
+      // Generate report
+      let reportId;
+      try {
+        const report = await generateValidationReport(
+          uploadedDataset.id,
+          uploadedDataset.name,
+          results
+        );
+        reportId = report.id;
+      } catch (error) {
+        console.error("Error generating report:", error);
+      }
+      
+      // Create validation result message
+      let resultContent = `Validation complete for "${uploadedFile.name}".\n\n`;
+      resultContent += `📊 Summary: ${passCount} passed, ${failCount} failed, ${warningCount} warnings\n\n`;
+      
+      if (failCount > 0) {
+        resultContent += "❌ Issues found:\n";
+        const failedChecks = results.filter(r => r.status === "Fail").slice(0, 3);
+        failedChecks.forEach(check => {
+          resultContent += `- ${check.check}: ${check.details}\n`;
+        });
+        
+        if (failCount > 3) {
+          resultContent += `- ... and ${failCount - 3} more issues\n`;
+        }
+      } else {
+        resultContent += "✅ No critical issues found.\n";
+      }
+      
+      if (warningCount > 0) {
+        resultContent += `\n⚠️ ${warningCount} warnings to review\n`;
+      }
+      
+      // Add validation results message
+      const resultMessage: ChatMessage = {
+        id: `msg_${Date.now()}_bot`,
+        content: resultContent,
+        role: "assistant",
+        timestamp: new Date(),
+        reportPreview: {
+          id: reportId,
+          datasetName: uploadedFile.name,
+          timestamp: new Date(),
+          summary: {
+            pass: passCount,
+            fail: failCount,
+            warning: warningCount,
+            info: results.filter(r => r.status === "Info").length
+          },
+          results: results
+        },
+        suggestions: [
+          "Show me details", 
+          "How do I fix these issues?", 
+          "Generate a full report", 
+          "Run another validation"
+        ]
+      };
+      
+      addMessage(resultMessage);
+      
+      // Refresh reports
+      fetchReports();
+      
+    } catch (error) {
+      console.error("Error validating file:", error);
+      
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now()}_bot`,
+        content: `I encountered an issue validating "${uploadedFile.name}". The file may be corrupted or in an unsupported format.`,
+        role: "assistant",
+        timestamp: new Date(),
+        isError: true,
+        suggestions: ["Try another file", "Try a different validation method"]
+      };
+      
+      addMessage(errorMessage);
+      
+      toast({
+        title: "Validation Failed",
+        description: "Could not validate the dataset. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsValidating(false);
+      setIsProcessing(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -530,6 +840,9 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
     }
     
     clearMessages();
+    setUploadedFile(null);
+    setValidationResults(null);
+    setShowFileUpload(false);
   };
 
   return (
@@ -632,6 +945,90 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
             showHelp={messages.length <= 2}
           />
           
+          {/* File Upload UI */}
+          {showFileUpload && (
+            <div className="p-4 border-t border-dashed border-primary/30 bg-primary/5">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium">Upload Dataset</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 w-6 p-0" 
+                  onClick={() => setShowFileUpload(false)}
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              
+              <div 
+                className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-6 text-center hover:border-primary/30 transition-colors cursor-pointer"
+                onClick={() => datasetFileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    const fileList = new DataTransfer();
+                    fileList.items.add(e.dataTransfer.files[0]);
+                    
+                    if (datasetFileInputRef.current) {
+                      datasetFileInputRef.current.files = fileList.files;
+                      handleFileUpload({ target: { files: fileList.files } } as any);
+                    }
+                  }
+                }}
+              >
+                {isUploading ? (
+                  <div className="flex flex-col items-center">
+                    <Loader className="h-10 w-10 text-primary/70 animate-spin mb-2" />
+                    <p className="text-sm text-muted-foreground">Uploading...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <Upload className="h-10 w-10 text-primary/70 mb-2" />
+                    <p className="text-sm font-medium">Drop file here or click to browse</p>
+                    <p className="text-xs text-muted-foreground mt-1">Supports CSV, Excel, and JSON</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex gap-2 mt-3">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs flex-1 hover:bg-primary/10 hover:text-primary"
+                  onClick={() => datasetFileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  <FileCheck className="h-3.5 w-3.5 mr-1" />
+                  Browse Files
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-xs flex-1 hover:bg-primary/10 hover:text-primary"
+                  onClick={fetchDatasets}
+                  disabled={isUploading || isLoadingDatasets}
+                >
+                  <Database className="h-3.5 w-3.5 mr-1" />
+                  Use Existing
+                </Button>
+              </div>
+              
+              <input 
+                type="file"
+                ref={datasetFileInputRef}
+                style={{ display: 'none' }}
+                accept=".csv,.xlsx,.xls,.json"
+                onChange={handleFileUpload}
+              />
+            </div>
+          )}
+          
           <div className="p-4 border-t bg-gradient-to-b from-muted/10 to-background">
             <form
               onSubmit={(e) => {
@@ -646,19 +1043,32 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
-                disabled={isProcessing}
+                disabled={isProcessing || isValidating || isUploading}
               />
-              <Button
-                type="submit"
-                size="icon"
-                className={`
-                  h-[60px] shrink-0 transition-colors
-                  ${inputValue.trim() ? 'bg-primary/90 hover:bg-primary' : 'bg-muted hover:bg-muted/80'} 
-                `}
-                disabled={isProcessing || !inputValue.trim()}
-              >
-                <Send className={`h-5 w-5 ${!inputValue.trim() ? 'text-muted-foreground' : ''}`} />
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="submit"
+                  size="icon"
+                  className={`
+                    h-[32px] shrink-0 transition-colors
+                    ${inputValue.trim() ? 'bg-primary/90 hover:bg-primary' : 'bg-muted hover:bg-muted/80'} 
+                  `}
+                  disabled={isProcessing || isValidating || isUploading || !inputValue.trim()}
+                >
+                  <Send className={`h-4 w-4 ${!inputValue.trim() ? 'text-muted-foreground' : ''}`} />
+                </Button>
+                
+                {!showFileUpload && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="h-[26px] shrink-0 bg-muted hover:bg-muted/80 hover:text-primary transition-colors"
+                    onClick={() => setShowFileUpload(true)}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
             </form>
             
             <div className="flex justify-center mt-2">
@@ -667,6 +1077,7 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
                 size="sm" 
                 className="text-xs text-muted-foreground flex items-center hover:text-primary hover:bg-primary/10 transition-colors"
                 onClick={() => handleSuggestionClick("Help me understand data validation")}
+                disabled={isProcessing || isValidating || isUploading}
               >
                 <Sparkles className="h-3 w-3 mr-1" />
                 Need help with data validation?
@@ -682,7 +1093,53 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
         ref={fileInputRef}
         style={{ display: 'none' }}
         accept=".json"
-        onChange={handleFileUpload}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const chatData = JSON.parse(event.target?.result as string);
+              
+              if (!chatData.messages || !Array.isArray(chatData.messages)) {
+                throw new Error("Invalid chat data format");
+              }
+              
+              // Convert string dates to Date objects
+              const parsedMessages = chatData.messages.map((msg: any) => ({
+                ...msg,
+                timestamp: new Date(msg.timestamp)
+              }));
+              
+              // Add imported messages
+              clearMessages();
+              parsedMessages.forEach((msg: ChatMessage) => addMessage(msg));
+              
+              // Save as a new chat
+              saveCurrentChat(chatData.title || "Imported Chat");
+              
+              toast({
+                title: "Chat Imported",
+                description: "The conversation was successfully imported."
+              });
+            } catch (error) {
+              console.error("Error importing chat:", error);
+              toast({
+                title: "Import Failed",
+                description: "Failed to import the conversation. The file format may be invalid.",
+                variant: "destructive"
+              });
+            }
+            
+            // Reset the file input
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
+          };
+          
+          reader.readAsText(file);
+        }}
       />
       
       {/* Save Chat Dialog */}
@@ -702,7 +1159,14 @@ ${passDiff > 0 ? `✅ Passes increased by ${passDiff}` : passDiff < 0 ? `⚠️ 
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveChatOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveChat}>Save</Button>
+            <Button onClick={() => {
+              saveCurrentChat(chatTitle);
+              setSaveChatOpen(false);
+              toast({
+                title: "Chat Saved",
+                description: "Your conversation has been saved."
+              });
+            }}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
