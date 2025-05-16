@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,15 +6,14 @@ import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { upload } from "lucide-react";
+import { Upload } from "lucide-react";  // Corrected capitalization
 import { useDatasets } from '@/contexts/DatasetsContext';
 // Let's make sure to import uploadDataset from the API
 import { uploadDataset, runValidation } from '@/services/api';
-import { toast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant";  // Limited to these two strings only
   content: string;
   timestamp: string;
 }
@@ -90,12 +90,11 @@ const AIChatbotEnhanced: React.FC = () => {
       refreshDatasets();
 
       // Add a message to the chat about the successful upload
-      const newMessage = {
+      const newMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
         content: `I've successfully uploaded the dataset "${dataset.name}". Would you like me to run a validation on it?`,
         timestamp: new Date().toISOString(),
-        // Don't include isError property for Message type
       };
 
       // Add the message to the conversation
@@ -114,7 +113,7 @@ const AIChatbotEnhanced: React.FC = () => {
       });
 
       // Add an error message to the chat
-      const errorMessage = {
+      const errorMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
         content: "I couldn't upload your dataset. Please check the file format and try again.",
@@ -146,7 +145,7 @@ const AIChatbotEnhanced: React.FC = () => {
       });
 
       // Add a message to the chat about the validation
-      const validationMessage = {
+      const validationMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
         content: `I've started the validation process for the dataset. I'll let you know when it's done.`,
@@ -163,7 +162,7 @@ const AIChatbotEnhanced: React.FC = () => {
       });
 
       // Add an error message to the chat
-      const errorMessage = {
+      const errorMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "assistant",
         content: "I couldn't start the validation process. Please try again.",
@@ -232,7 +231,7 @@ const AIChatbotEnhanced: React.FC = () => {
           />
           <Button variant="outline" asChild>
             <label htmlFor="upload-dataset" className="cursor-pointer">
-              <upload className="mr-2 h-4 w-4" />
+              <Upload className="mr-2 h-4 w-4" />
               <span>Upload Dataset</span>
             </label>
           </Button>
