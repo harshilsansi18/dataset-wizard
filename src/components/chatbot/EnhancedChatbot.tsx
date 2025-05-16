@@ -23,6 +23,7 @@ import { getDatasets, runValidation, ValidationMethods, generateValidationReport
 import { useChatbot, ChatMessage } from '@/contexts/ChatbotContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { format } from 'date-fns';
 import ChatHistory from './ChatHistory';
 import ChatSettings from './ChatSettings';
 import SavedChats from './SavedChats';
