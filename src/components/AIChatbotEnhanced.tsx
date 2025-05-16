@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,7 +136,9 @@ const AIChatbotEnhanced: React.FC = () => {
 
     try {
       // Run validation on the last uploaded dataset
-      const validationResult = await runValidation(lastUploadedDatasetId);
+      // Fix: Pass a second parameter to runValidation (the validation method)
+      // The available methods are defined in api.ts as ValidationMethods
+      const validationResult = await runValidation(lastUploadedDatasetId, "basic");
 
       toast({
         title: "Validation Started",
