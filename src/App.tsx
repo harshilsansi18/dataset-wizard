@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +8,7 @@ import { useEffect } from "react";
 import { ChatbotProvider } from "@/contexts/ChatbotContext";
 
 import Navbar from "@/components/navigation/Navbar";
-import AIChatbotEnhanced from "@/components/AIChatbotEnhanced";
+import EnhancedChatbot from "./components/chatbot/EnhancedChatbot";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Datasets from "./pages/Datasets";
@@ -48,7 +47,8 @@ const AppContent = () => {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </main>
-              <AIChatbotEnhanced />
+              {/* Replace the old chatbots with our new EnhancedChatbot */}
+              <EnhancedChatbot />
             </div>
           </BrowserRouter>
         </ChatbotProvider>
