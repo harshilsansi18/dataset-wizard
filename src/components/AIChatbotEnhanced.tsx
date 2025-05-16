@@ -68,6 +68,8 @@ const AIChatbotEnhanced = () => {
   const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch data when bot opens
   useEffect(() => {
@@ -138,6 +140,112 @@ const AIChatbotEnhanced = () => {
       console.error("Error fetching datasets:", error);
     } finally {
       setIsLoadingDatasets(false);
+    }
+  };
+
+  // Function to handle dataset file upload
+  const handleDatasetFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    setIsUploading(true);
+    
+    try {
+      // Add user message about uploading
+      const userMessage: Message = {
+        id: `msg_${Date.now()}_upload`,
+        content: `Uploading dataset: ${file.name}`,
+        role: "user",
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, userMessage]);
+      
+      // Add processing message
+      const processingMessage: Message = {
+        id: `msg_${Date.now()}_processing`,
+        content: `Processing ${file.name}...`,
+        role: "assistant",
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, processingMessage]);
+      
+      // Upload the dataset
+      const dataset = await uploadDataset(file);
+      
+      // Fetch updated dataset list
+      fetchDatasets();
+      
+      // Create success message
+      const successMessage: Message = {
+        id: `msg_${Date.now()}_success`,
+        content: `Dataset "${file.name}" has been successfully uploaded! It contains ${dataset.rowCount} rows and ${dataset.columnCount} columns. Would you like to run validation on this dataset?`,
+        role: "assistant",
+        timestamp: new Date(),
+        suggestions: ["Run basic validation", "Run advanced validation", "Run format checks"]
+      };
+      
+      setMessages(prev => [...prev, successMessage]);
+      
+      // Set validation suggestions
+      setSuggestions([{
+        datasetName: dataset.name,
+        datasetId: dataset.id,
+        method: ValidationMethods.BASIC,
+        description: `Run basic validation on ${dataset.name}`
+      }, {
+        datasetName: dataset.name,
+        datasetId: dataset.id,
+        method: ValidationMethods.FORMAT_CHECKS,
+        description: `Run format checks on ${dataset.name}`
+      }, {
+        datasetName: dataset.name,
+        datasetId: dataset.id,
+        method: ValidationMethods.DATA_COMPLETENESS,
+        description: `Check data completeness on ${dataset.name}`
+      }]);
+      
+      toast({
+        title: "Dataset Uploaded",
+        description: `${file.name} has been successfully uploaded.`,
+      });
+      
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: `msg_${Date.now()}_error`,
+        content: `I'm sorry, but there was an error uploading ${file.name}. ${error instanceof Error ? error.message : 'Please try again or use a different file.'}`,
+        role: "assistant",
+        timestamp: new Date(),
+        isError: true,
+        suggestions: ["Try another file", "Go to datasets page"]
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload ${file.name}. ${error instanceof Error ? error.message : ''}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploading(false);
+      
+      // Clear the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // Function to trigger file upload dialog
+  const openFileUploadDialog = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -836,6 +944,50 @@ A report has been generated. Would you like to view it?`,
           )}
           
           <div className="p-4 border-t bg-gradient-to-b from-muted/10 to-background">
+            {/* File upload input (hidden) */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleDatasetFileUpload}
+              accept=".csv,.json,.xlsx,.xls"
+              className="hidden"
+            />
+            
+            {suggestions.length > 0 && (
+              <div className="mb-3 space-y-2">
+                <div className="text-sm font-medium">Suggested actions:</div>
+                <div className="grid grid-cols-1 gap-2">
+                  {suggestions.map((suggestion, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start text-xs h-auto py-1.5 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                      onClick={() => handleRunValidation(suggestion)}
+                      disabled={isProcessing || isUploading}
+                    >
+                      <ChevronRight className="h-3 w-3 mr-1 text-primary" />
+                      {suggestion.description}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Upload button */}
+            <div className="flex justify-center mb-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openFileUploadDialog}
+                disabled={isUploading}
+                className="text-xs flex items-center gap-1.5"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {isUploading ? "Uploading..." : "Upload Dataset"}
+              </Button>
+            </div>
+            
             <form
               onSubmit={(e) => {
                 e.preventDefault();

@@ -2,6 +2,7 @@ import { toast } from "@/hooks/use-toast";
 import Papa from "papaparse";
 import { DatasetType } from "./types";
 import { getImportedDatasets } from "./databaseService";
+import { processExcelFile } from './excelService';
 
 // Persistent storage using localStorage
 const DATASETS_STORAGE_KEY = "soda_core_datasets";
@@ -253,54 +254,92 @@ export const getDatasetById = (id: string): Promise<DatasetType | undefined> => 
 };
 
 // Process file content based on type
-const processFileContent = async (file: File): Promise<{ content: any[], headers: string[], rowCount: number, columnCount: number }> => {
-  return new Promise((resolve, reject) => {
-    const fileType = determineFileType(file.name);
-    
-    if (fileType === 'CSV') {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          const headers = results.meta.fields || [];
-          resolve({
-            content: results.data,
-            headers,
-            rowCount: results.data.length,
-            columnCount: headers.length
+/**
+ * Process file content based on file type
+ * @param file The file to process
+ * @returns Promise with processed data
+ */
+export const processFileContent = async (file: File): Promise<any> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const fileType = getFileType(file);
+      
+      switch (fileType) {
+        case 'CSV':
+          // Process CSV file
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              const headers = results.meta.fields || [];
+              resolve({
+                content: results.data,
+                headers,
+                rowCount: results.data.length,
+                columnCount: headers.length
+              });
+            },
+            error: (error) => {
+              reject(new Error(`CSV parsing error: ${error.message}`));
+            }
           });
-        },
-        error: (error) => {
-          reject(new Error(`CSV parsing error: ${error.message}`));
-        }
-      });
-    } else if (fileType === 'JSON') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = JSON.parse(e.target?.result as string);
-          const isArray = Array.isArray(content);
-          const data = isArray ? content : [content];
-          const headers = isArray && content.length > 0 ? Object.keys(content[0]) : Object.keys(content);
-          
-          resolve({
-            content: data,
-            headers,
-            rowCount: data.length,
-            columnCount: headers.length
-          });
-        } catch (error) {
-          reject(new Error('Invalid JSON format'));
-        }
-      };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsText(file);
-    } else {
-      reject(new Error(`Unsupported file type: ${fileType}`));
+          break;
+        case 'JSON':
+          // Process JSON file
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const content = JSON.parse(e.target?.result as string);
+              const isArray = Array.isArray(content);
+              const data = isArray ? content : [content];
+              const headers = isArray && content.length > 0 ? Object.keys(content[0]) : Object.keys(content);
+              
+              resolve({
+                content: data,
+                headers,
+                rowCount: data.length,
+                columnCount: headers.length
+              });
+            } catch (error) {
+              reject(new Error('Invalid JSON format'));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsText(file);
+          break;
+        case 'Excel':
+          const excelData = await processExcelFile(file);
+          resolve(excelData);
+          break;
+        default:
+          reject(new Error(`Unsupported file type: ${fileType}`));
+      }
+    } catch (error) {
+      reject(error);
     }
   });
 };
 
+/**
+ * Get file type based on extension
+ * @param file The file to check
+ * @returns The file type (CSV, JSON, Excel)
+ */
+export const getFileType = (file: File): string => {
+  const filename = file.name.toLowerCase();
+  
+  if (filename.endsWith('.csv')) {
+    return 'CSV';
+  } else if (filename.endsWith('.json')) {
+    return 'JSON';
+  } else if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+    return 'Excel';
+  } else {
+    return 'Unknown';
+  }
+};
+
+// Upload a dataset
 export const uploadDataset = (file: File): Promise<DatasetType> => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -342,6 +381,7 @@ export const uploadDataset = (file: File): Promise<DatasetType> => {
   });
 };
 
+// Download a dataset
 export const downloadDataset = (dataset: DatasetType): Promise<boolean> => {
   return new Promise((resolve, reject) => {
     try {
@@ -402,6 +442,7 @@ export const downloadDataset = (dataset: DatasetType): Promise<boolean> => {
   });
 };
 
+// Create a new dataset
 export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
   return new Promise(async (resolve) => {
     const id = `ds_${Date.now()}`;
@@ -429,6 +470,7 @@ export const createDataset = (dataset: DatasetType): Promise<DatasetType> => {
   });
 };
 
+// Update an existing dataset
 export const updateDataset = (
   id: string,
   updates: Partial<DatasetType>
@@ -479,6 +521,7 @@ export const updateDataset = (
   });
 };
 
+// Delete a dataset
 export const deleteDataset = (id: string): Promise<boolean> => {
   return new Promise(async (resolve) => {
     if (datasetsStore[id]) {
